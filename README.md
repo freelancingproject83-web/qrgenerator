@@ -151,6 +151,10 @@ Create two Vercel projects connected to the same Git repository:
 
 Keep **Include source files outside of the Root Directory** enabled for both projects because both apps import `packages/contracts`. The `vercel.json` inside each app contains its independent install, build, and output settings. Add the production and preview frontend domains to the API's `CORS_ORIGINS`, separated by commas, and redeploy the API after those domains are known.
 
-## Next product work
+## Identifier workflow
 
-The two frontends are shells, and the API currently exposes only health endpoints. Before exposing management features, add authentication and enforce server-side authorization for every admin API route.
+The user frontend implements the complete registry workflow: account creation and login, refresh-cookie session restoration, QR/Data Matrix size previews, idempotent batch issuance, authenticated SVG/PDF downloads, revocation, and the public scan-result page. The admin frontend remains an independent shell for future platform-level administration.
+
+Issued artwork is digitally decoded before it is persisted, but that is not physical print qualification. Validate the selected symbol, printer, substrate, ink, production process, and target scanning devices before using codes on saleable products. A registered identifier can be copied and does not by itself establish medicine authenticity or safety.
+
+The code API is documented in [`API.md`](./API.md). Its authenticated endpoints enforce ownership server-side; public lookup exposes only identifier status and intentionally does not publish medicine details.

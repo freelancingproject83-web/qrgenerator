@@ -461,3 +461,90 @@ const response = await apiRequest(`/api/v1/admin/users/${userId}/role`, {
 - Production and preview frontend origins must be present in the API `CORS_ORIGINS` configuration.
 
 The source-of-truth runtime schemas and inferred TypeScript types live in `packages/contracts/src/index.ts` and can be imported from `@qrgenerator/contracts` inside this monorepo.
+
+## Identifier endpoints
+
+All management endpoints require `Authorization: Bearer ACCESS_TOKEN`. Codes and jobs are scoped to the authenticated owner. Send JSON request bodies with `Content-Type: application/json`.
+
+### Preview artwork
+
+```http
+POST /api/v1/code-jobs/preview
+```
+
+The request is a print-options object. A preview is an unissued sizing proof: its random URL is not stored and must never be printed on a product.
+
+```json
+{
+  "format": "qr",
+  "errorCorrection": "M",
+  "moduleSizeMm": 0.25,
+  "printerDpi": 600,
+  "printMode": "standard"
+}
+```
+
+`format` may be `qr` or `data_matrix`. QR accepts error correction `L`, `M`, `Q`, or `H`; level `L` requires `printMode: "experimental"`. The response contains `issued: false`, an SVG string, the temporary scan URL, and the complete print report.
+
+### Issue a batch
+
+```http
+POST /api/v1/code-jobs
+Idempotency-Key: RANDOM_UUID
+```
+
+```json
+{
+  "quantity": 10,
+  "reference": "LOT-2026-001",
+  "print": {
+    "format": "qr",
+    "errorCorrection": "M",
+    "moduleSizeMm": 0.25,
+    "printerDpi": 600,
+    "printMode": "standard"
+  }
+}
+```
+
+Quantity must be between 1 and 50. Repeating the same idempotency key and body returns the original job with `replayed: true`; changing the body for a used key returns `409 IDEMPOTENCY_CONFLICT`. A new job returns `201`, while a replay returns `200`.
+
+Each response unit contains its UUID, position, unique token, public `scanUrl`, status, print report, and relative SVG/PDF download paths.
+
+### Read jobs and units
+
+```http
+GET /api/v1/code-jobs/:id
+GET /api/v1/codes/:id
+```
+
+These return only records owned by the authenticated user. A missing or unowned identifier returns `404`.
+
+### Download issued artwork
+
+```http
+GET /api/v1/codes/:id/artwork.svg
+GET /api/v1/codes/:id/artwork.pdf
+```
+
+Downloads require the bearer token and return attachment data, not JSON. The server regenerates artwork from the retained matrix and verifies the SVG hash before returning it. Revoked artwork returns `409 CODE_REVOKED`.
+
+### Revoke an identifier
+
+```http
+POST /api/v1/codes/:id/revoke
+```
+
+```json
+{ "reason": "Packaging damaged" }
+```
+
+The reason must contain 1–300 characters. Revocation is permanent and changes the public lookup result immediately.
+
+### Public scan lookup
+
+```http
+GET /api/v1/public/codes/:token
+```
+
+This endpoint does not require authentication. It returns whether a registered token is `active` or `revoked`. Medicine details are currently `not_published`; a successful lookup does not prove authenticity or safety. Unknown and malformed identifiers return `404` and `400`, respectively.

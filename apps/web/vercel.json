@@ -4,10 +4,17 @@
   "installCommand": "cd ../.. && npm ci",
   "buildCommand": "cd ../.. && npm run build -w @qrgenerator/contracts && npm run build -w @qrgenerator/web",
   "outputDirectory": "dist",
-  "rewrites": [{ "source": "/:token([A-Z2-7]{26})", "destination": "/index.html" }],
-  "headers": [{ "source": "/(.*)", "headers": [
-    { "key": "Referrer-Policy", "value": "no-referrer" },
-    { "key": "X-Content-Type-Options", "value": "nosniff" },
-    { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
-  ] }]
+  "rewrites": [
+    { "source": "/:token([A-Z2-7]{26})", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    }
+  ]
 }

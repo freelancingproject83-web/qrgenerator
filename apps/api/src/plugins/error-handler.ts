@@ -20,7 +20,13 @@ export function registerErrorHandler(app: FastifyInstance) {
 
     if (error instanceof AppError) {
       return reply.code(error.statusCode).send({
-        error: { code: error.code, message: error.message, ...(error instanceof CodeError && error.details ? { details: error.details } : {}) },
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error instanceof CodeError && error.details
+            ? { details: error.details }
+            : {}),
+        },
       });
     }
 

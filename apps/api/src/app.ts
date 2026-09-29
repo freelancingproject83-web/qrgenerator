@@ -10,7 +10,10 @@ import { createDatabase } from './db/client.js';
 import { AuthController } from './modules/auth/auth.controller.js';
 import { registerAuthRoutes } from './modules/auth/auth.routes.js';
 import { CodeController } from './modules/codes/code.controller.js';
-import { DrizzleCodeRepository, type CodeRepository } from './modules/codes/code.repository.js';
+import {
+  DrizzleCodeRepository,
+  type CodeRepository,
+} from './modules/codes/code.repository.js';
 import { CodeService } from './modules/codes/code.service.js';
 import { registerCodeRoutes } from './modules/codes/code.routes.js';
 import { AuthService } from './modules/auth/auth.service.js';
@@ -82,8 +85,18 @@ export async function buildApp(
   const authController = new AuthController(authService, config);
   const userController = new UserController(new UserService(userRepository));
   const verifyTrustedOrigin = trustedOrigin(config.CORS_ORIGINS);
-  const codeController = new CodeController(new CodeService(overrides.codeRepository ?? new DrizzleCodeRepository(db), userRepository, config.PUBLIC_SCAN_ORIGIN));
-  await app.register(async (codeApp) => registerCodeRoutes(codeApp, codeController, authenticate), { prefix: '/api/v1' });
+  const codeController = new CodeController(
+    new CodeService(
+      overrides.codeRepository ?? new DrizzleCodeRepository(db),
+      userRepository,
+      config.PUBLIC_SCAN_ORIGIN,
+    ),
+  );
+  await app.register(
+    async (codeApp) =>
+      registerCodeRoutes(codeApp, codeController, authenticate),
+    { prefix: '/api/v1' },
+  );
 
   await app.register(
     async (authApp) =>

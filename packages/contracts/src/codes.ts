@@ -74,6 +74,13 @@ export const codeJobResponseSchema = z.object({
   replayed: z.boolean(),
   codes: z.array(codeUnitResponseSchema),
 });
+export const codePreviewResponseSchema = z.object({
+  issued: z.literal(false),
+  message: z.string(),
+  scanUrl: z.string(),
+  svg: z.string(),
+  print: printReportSchema,
+});
 export const publicCodeResponseSchema = z.object({
   code: z.object({
     token: codeTokenSchema,
@@ -86,3 +93,4 @@ export type CodePrintOptions = z.infer<typeof codePrintOptionsSchema>;
 export type CreateCodeJob = z.infer<typeof createCodeJobSchema>;
 export type PrintReport = z.infer<typeof printReportSchema>;
 export type CodeJobResponse = z.infer<typeof codeJobResponseSchema>;
+export type CodePreviewResponse = z.infer<typeof codePreviewResponseSchema>;
