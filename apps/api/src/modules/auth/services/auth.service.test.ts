@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UserRecord } from '../../db/schema.js';
-import { UnauthorizedError } from '../../errors/app-error.js';
-import type { PasswordHasher } from '../../utils/password.js';
-import { hashRefreshToken } from '../../utils/tokens.js';
-import type { UserRepository } from '../users/user.repository.js';
+import type { UserRecord } from '../../../db/schema.js';
+import { UnauthorizedError } from '../../../errors/app-error.js';
+import type { PasswordHasher } from '../../../utils/password.js';
+import { hashRefreshToken } from '../../../utils/tokens.js';
+import type { UserRepository } from '../../users/repositories/user.repository.js';
 import { AuthService } from './auth.service.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');

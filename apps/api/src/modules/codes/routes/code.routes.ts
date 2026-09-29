@@ -1,5 +1,5 @@
 import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
-import type { CodeController } from './code.controller.js';
+import type { CodeController } from '../controllers/code.controller.js';
 
 export function registerCodeRoutes(
   app: FastifyInstance,

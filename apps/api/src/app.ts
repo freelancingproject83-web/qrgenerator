@@ -7,20 +7,20 @@ import { sql } from 'drizzle-orm';
 import Fastify from 'fastify';
 import type { AppConfig } from './config.js';
 import { createDatabase } from './db/client.js';
-import { AuthController } from './modules/auth/auth.controller.js';
-import { registerAuthRoutes } from './modules/auth/auth.routes.js';
-import { CodeController } from './modules/codes/code.controller.js';
+import { AuthController } from './modules/auth/controllers/auth.controller.js';
+import { registerAuthRoutes } from './modules/auth/routes/auth.routes.js';
+import { CodeController } from './modules/codes/controllers/code.controller.js';
 import {
   DrizzleCodeRepository,
   type CodeRepository,
-} from './modules/codes/code.repository.js';
-import { CodeService } from './modules/codes/code.service.js';
-import { registerCodeRoutes } from './modules/codes/code.routes.js';
-import { AuthService } from './modules/auth/auth.service.js';
-import { UserController } from './modules/users/user.controller.js';
-import { DrizzleUserRepository } from './modules/users/user.repository.js';
-import { registerUserRoutes } from './modules/users/user.routes.js';
-import { UserService } from './modules/users/user.service.js';
+} from './modules/codes/repositories/code.repository.js';
+import { CodeService } from './modules/codes/services/code.service.js';
+import { registerCodeRoutes } from './modules/codes/routes/code.routes.js';
+import { AuthService } from './modules/auth/services/auth.service.js';
+import { UserController } from './modules/users/controllers/user.controller.js';
+import { DrizzleUserRepository } from './modules/users/repositories/user.repository.js';
+import { registerUserRoutes } from './modules/users/routes/user.routes.js';
+import { UserService } from './modules/users/services/user.service.js';
 import { authenticate } from './plugins/authenticate.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { trustedOrigin } from './plugins/trusted-origin.js';
@@ -28,7 +28,7 @@ import {
   passwordHasher as defaultPasswordHasher,
   type PasswordHasher,
 } from './utils/password.js';
-import type { UserRepository } from './modules/users/user.repository.js';
+import type { UserRepository } from './modules/users/repositories/user.repository.js';
 
 interface AppOverrides {
   codeRepository?: CodeRepository;

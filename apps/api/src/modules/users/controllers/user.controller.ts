@@ -3,7 +3,7 @@ import {
   userIdParamsSchema,
 } from '@qrgenerator/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { UserService } from './user.service.js';
+import type { UserService } from '../services/user.service.js';
 
 export class UserController {
   constructor(private readonly userService: UserService) {}

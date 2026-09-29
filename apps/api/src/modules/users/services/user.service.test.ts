@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { UserRecord } from '../../db/schema.js';
-import { ForbiddenError } from '../../errors/app-error.js';
-import type { UserRepository } from './user.repository.js';
+import type { UserRecord } from '../../../db/schema.js';
+import { ForbiddenError } from '../../../errors/app-error.js';
+import type { UserRepository } from '../repositories/user.repository.js';
 import { UserService } from './user.service.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');

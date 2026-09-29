@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { vi } from 'vitest';
 import type { UserRecord } from './db/schema.js';
 import type { PasswordHasher } from './utils/password.js';
-import type { UserRepository } from './modules/users/user.repository.js';
+import type { UserRepository } from './modules/users/repositories/user.repository.js';
 import { buildApp } from './app.js';
 
 let app: FastifyInstance | undefined;

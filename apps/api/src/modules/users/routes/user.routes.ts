@@ -1,5 +1,5 @@
 import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
-import type { UserController } from './user.controller.js';
+import type { UserController } from '../controllers/user.controller.js';
 
 export function registerUserRoutes(
   app: FastifyInstance,

@@ -6,7 +6,7 @@ import { Resvg } from '@resvg/resvg-js';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader';
 import type { CodePrintOptions, PrintReport } from '@qrgenerator/contracts';
-import { CodeError } from './code.error.js';
+import { CodeError } from '../errors/code.error.js';
 
 const require = createRequire(import.meta.url);
 // No runtime CDN or outbound request is needed for validation.

@@ -1,5 +1,5 @@
 import type { FastifyInstance, preHandlerHookHandler } from 'fastify';
-import type { AuthController } from './auth.controller.js';
+import type { AuthController } from '../controllers/auth.controller.js';
 
 export function registerAuthRoutes(
   app: FastifyInstance,

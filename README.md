@@ -12,6 +12,20 @@ This repository contains three independently deployable TypeScript applications:
 
 `packages/contracts` contains shared runtime schemas and inferred TypeScript types. Each app has its own `package.json`, build command, and environment example.
 
+### API module structure
+
+Each API feature is grouped by responsibility instead of keeping implementation files flat:
+
+```text
+apps/api/src/modules/<feature>/
+├── controllers/
+├── repositories/
+├── routes/
+└── services/
+```
+
+Feature-specific supporting code uses named folders such as `errors`, `renderers`, and `utils`. Tests live beside the service they exercise.
+
 ## Local development
 
 Use Node.js 24 LTS and npm 11. Docker is needed only to run the local PostgreSQL container.

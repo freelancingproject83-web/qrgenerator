@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '../../db/schema.js';
-import { codeEvents, codeJobs, codeUnits } from '../../db/schema.js';
+import * as schema from '../../../db/schema.js';
+import { codeEvents, codeJobs, codeUnits } from '../../../db/schema.js';
 
 export interface StoredJob {
   job: schema.CodeJobRecord;

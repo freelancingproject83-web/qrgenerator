@@ -5,14 +5,14 @@ import type {
   User,
   UserRole,
 } from '@qrgenerator/contracts';
-import type { UserRecord } from '../../db/schema.js';
-import { ConflictError, UnauthorizedError } from '../../errors/app-error.js';
-import type { PasswordHasher } from '../../utils/password.js';
-import { createRefreshToken, hashRefreshToken } from '../../utils/tokens.js';
+import type { UserRecord } from '../../../db/schema.js';
+import { ConflictError, UnauthorizedError } from '../../../errors/app-error.js';
+import type { PasswordHasher } from '../../../utils/password.js';
+import { createRefreshToken, hashRefreshToken } from '../../../utils/tokens.js';
 import type {
   NewRefreshSession,
   UserRepository,
-} from '../users/user.repository.js';
+} from '../../users/repositories/user.repository.js';
 
 export interface RequestMetadata {
   ipAddress?: string;

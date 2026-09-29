@@ -1,8 +1,8 @@
 import type { UserRole } from '@qrgenerator/contracts';
 import { and, eq, gt, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '../../db/schema.js';
-import { refreshSessions, users } from '../../db/schema.js';
+import * as schema from '../../../db/schema.js';
+import { refreshSessions, users } from '../../../db/schema.js';
 
 export interface NewRefreshSession {
   userId: string;

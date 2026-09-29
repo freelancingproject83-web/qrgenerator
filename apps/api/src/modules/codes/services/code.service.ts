@@ -5,13 +5,16 @@ import {
   publicCodeResponseSchema,
 } from '@qrgenerator/contracts';
 import type { CodePrintOptions, CreateCodeJob } from '@qrgenerator/contracts';
-import type { CodeJobRecord, CodeUnitRecord } from '../../db/schema.js';
-import { NotFoundError, UnauthorizedError } from '../../errors/app-error.js';
-import type { UserRepository } from '../users/user.repository.js';
-import { createCodeToken, scanUrlFor } from './code-identifier.js';
-import { CodeError } from './code.error.js';
-import { pdfFor, renderCode, svgFor } from './code-renderer.js';
-import type { CodeRepository, StoredJob } from './code.repository.js';
+import type { CodeJobRecord, CodeUnitRecord } from '../../../db/schema.js';
+import { NotFoundError, UnauthorizedError } from '../../../errors/app-error.js';
+import type { UserRepository } from '../../users/repositories/user.repository.js';
+import { CodeError } from '../errors/code.error.js';
+import type {
+  CodeRepository,
+  StoredJob,
+} from '../repositories/code.repository.js';
+import { pdfFor, renderCode, svgFor } from '../renderers/code-renderer.js';
+import { createCodeToken, scanUrlFor } from '../utils/code-identifier.js';
 
 function uniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;

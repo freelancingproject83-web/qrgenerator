@@ -3,9 +3,9 @@ import {
   loginInputSchema,
 } from '@qrgenerator/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { AppConfig } from '../../config.js';
-import { UnauthorizedError } from '../../errors/app-error.js';
-import type { AuthResult, AuthService } from './auth.service.js';
+import type { AppConfig } from '../../../config.js';
+import { UnauthorizedError } from '../../../errors/app-error.js';
+import type { AuthResult, AuthService } from '../services/auth.service.js';
 
 export class AuthController {
   constructor(

@@ -4,9 +4,9 @@ import {
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
-} from '../../errors/app-error.js';
-import { toUser } from '../auth/auth.service.js';
-import type { UserRepository } from './user.repository.js';
+} from '../../../errors/app-error.js';
+import { toUser } from '../../auth/services/auth.service.js';
+import type { UserRepository } from '../repositories/user.repository.js';
 
 export class UserService {
   constructor(private readonly repository: UserRepository) {}

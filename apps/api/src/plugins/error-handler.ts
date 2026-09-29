@@ -1,7 +1,7 @@
 import { ZodError } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { AppError } from '../errors/app-error.js';
-import { CodeError } from '../modules/codes/code.error.js';
+import { CodeError } from '../modules/codes/errors/code.error.js';
 
 export function registerErrorHandler(app: FastifyInstance) {
   app.setErrorHandler((error, _request, reply) => {

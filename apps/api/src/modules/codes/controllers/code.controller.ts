@@ -7,7 +7,7 @@ import {
   revokeCodeSchema,
 } from '@qrgenerator/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { CodeService } from './code.service.js';
+import type { CodeService } from '../services/code.service.js';
 
 export class CodeController {
   constructor(private readonly service: CodeService) {}

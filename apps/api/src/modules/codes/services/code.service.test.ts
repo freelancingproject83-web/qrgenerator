@@ -3,9 +3,12 @@ import type {
   CodeJobRecord,
   CodeUnitRecord,
   UserRecord,
-} from '../../db/schema.js';
-import type { UserRepository } from '../users/user.repository.js';
-import type { CodeRepository, StoredJob } from './code.repository.js';
+} from '../../../db/schema.js';
+import type { UserRepository } from '../../users/repositories/user.repository.js';
+import type {
+  CodeRepository,
+  StoredJob,
+} from '../repositories/code.repository.js';
 import { CodeService } from './code.service.js';
 
 const owner: UserRecord = {
