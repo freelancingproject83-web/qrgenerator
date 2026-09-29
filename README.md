@@ -7,8 +7,8 @@ This repository contains three independently deployable TypeScript applications:
 | Workspace    | Purpose                           | Local address           |
 | ------------ | --------------------------------- | ----------------------- |
 | `apps/api`   | Fastify API and PostgreSQL access | `http://127.0.0.1:3000` |
-| `apps/web`   | React user app                    | `http://127.0.0.1:5173` |
-| `apps/admin` | React admin app                   | `http://127.0.0.1:5174` |
+| `apps/web`   | Public scan-result site           | `http://127.0.0.1:5173` |
+| `apps/admin` | Authenticated code generator      | `http://127.0.0.1:5174` |
 
 `packages/contracts` contains shared runtime schemas and inferred TypeScript types. Each app has its own `package.json`, build command, and environment example.
 
@@ -25,7 +25,7 @@ cp apps/admin/.env.example apps/admin/.env
 npm run dev
 ```
 
-The API exposes `/health` for process health and `/ready` for database readiness. The frontends show API connectivity. The development database password in `compose.yaml` is for local use only.
+The API exposes `/health` for process health and `/ready` for database readiness. The admin app provides the authenticated generation workflow; the public web app resolves scanned identifiers. The development database password in `compose.yaml` is for local use only.
 
 ## Authentication API
 
@@ -144,16 +144,16 @@ The demo database is intentionally single-zone, has no SLA on the shared-core ti
 
 Create two Vercel projects connected to the same Git repository:
 
-| Vercel project | Root Directory | Environment variable                         |
-| -------------- | -------------- | -------------------------------------------- |
-| User frontend  | `apps/web`     | `VITE_API_BASE_URL=https://YOUR_API.run.app` |
-| Admin frontend | `apps/admin`   | `VITE_API_BASE_URL=https://YOUR_API.run.app` |
+| Vercel project   | Root Directory | Environment variable                         |
+| ---------------- | -------------- | -------------------------------------------- |
+| Public scan site | `apps/web`     | `VITE_API_BASE_URL=https://YOUR_API.run.app` |
+| Generator admin  | `apps/admin`   | `VITE_API_BASE_URL=https://YOUR_API.run.app` |
 
 Keep **Include source files outside of the Root Directory** enabled for both projects because both apps import `packages/contracts`. The `vercel.json` inside each app contains its independent install, build, and output settings. Add the production and preview frontend domains to the API's `CORS_ORIGINS`, separated by commas, and redeploy the API after those domains are known.
 
 ## Identifier workflow
 
-The user frontend implements the complete registry workflow: account creation and login, refresh-cookie session restoration, QR/Data Matrix size previews, idempotent batch issuance, authenticated SVG/PDF downloads, revocation, and the public scan-result page. The admin frontend remains an independent shell for future platform-level administration.
+The admin frontend implements account creation and login, refresh-cookie session restoration, QR/Data Matrix size previews, idempotent batch issuance, authenticated SVG/PDF downloads, and revocation. The public web frontend is intentionally separate: issued codes point to it, and it displays the current registry status after a scan.
 
 Issued artwork is digitally decoded before it is persisted, but that is not physical print qualification. Validate the selected symbol, printer, substrate, ink, production process, and target scanning devices before using codes on saleable products. A registered identifier can be copied and does not by itself establish medicine authenticity or safety.
 
