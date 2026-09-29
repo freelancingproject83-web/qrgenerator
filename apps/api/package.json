@@ -1,0 +1,40 @@
+{
+  "name": "@qrgenerator/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "node dist/migrate.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/cors": "11.3.0",
+    "@fastify/jwt": "10.2.2",
+    "@fastify/rate-limit": "11.2.0",
+    "@qrgenerator/contracts": "*",
+    "@resvg/resvg-js": "2.6.2",
+    "argon2": "0.45.1",
+    "bwip-js": "4.11.4",
+    "dotenv": "18.0.4",
+    "drizzle-orm": "0.45.3",
+    "fastify": "5.12.5",
+    "pdf-lib": "1.17.1",
+    "pg": "8.23.0",
+    "zod": "4.6.5",
+    "zxing-wasm": "3.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "vitest": "5.0.2"
+  }
+}

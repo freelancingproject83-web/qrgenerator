@@ -1,0 +1,35 @@
+{
+  "name": "qrgenerator",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@11.17.0",
+  "engines": {
+    "node": ">=24 <27",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "predev": "npm run build -w @qrgenerator/contracts",
+    "dev": "concurrently -k -n contracts,api,web,admin 'npm run dev -w @qrgenerator/contracts' 'npm run dev -w @qrgenerator/api' 'npm run dev -w @qrgenerator/web' 'npm run dev -w @qrgenerator/admin'",
+    "build": "npm run build -w @qrgenerator/contracts && npm run build -w @qrgenerator/api && npm run build -w @qrgenerator/web && npm run build -w @qrgenerator/admin",
+    "typecheck": "npm run build -w @qrgenerator/contracts && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build",
+    "db:generate": "npm run db:generate -w @qrgenerator/api",
+    "db:migrate": "npm run db:migrate -w @qrgenerator/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "concurrently": "10.0.5",
+    "eslint": "10.11.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.1"
+  }
+}
