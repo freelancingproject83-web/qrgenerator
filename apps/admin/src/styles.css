@@ -72,6 +72,26 @@ h3,
 .loading .brand-mark {
   margin: auto;
 }
+.page-loading {
+  display: grid;
+  min-height: 280px;
+  place-content: center;
+  justify-items: center;
+  color: var(--muted);
+}
+.loading-ring {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .auth-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
