@@ -8,7 +8,7 @@ This repository contains three independently deployable TypeScript applications:
 | ------------ | --------------------------------- | ----------------------- |
 | `apps/api`   | Fastify API and PostgreSQL access | `http://127.0.0.1:3000` |
 | `apps/web`   | Public scan-result site           | `http://127.0.0.1:5173` |
-| `apps/admin` | Authenticated code generator      | `http://127.0.0.1:5174` |
+| `apps/admin` | Tenant batch and code console     | `http://127.0.0.1:5174` |
 
 `packages/contracts` contains shared runtime schemas and inferred TypeScript types. Each app has its own `package.json`, build command, and environment example.
 
@@ -54,14 +54,17 @@ All endpoints are under `/api/v1`. Public account creation always assigns the `t
 | `GET`   | `/users/me`                 | Bearer token   | Return the current database user              |
 | `PATCH` | `/admin/users/:userId/role` | Super admin    | Promote a tenant user to an admin role        |
 
-Registration and login accept:
+Registration requires a tenant selected from `GET /api/v1/tenants`:
 
 ```json
 {
   "email": "person@example.com",
-  "password": "at-least-8-characters"
+  "password": "at-least-8-characters",
+  "tenantId": "UUID_FROM_GET_/api/v1/tenants"
 }
 ```
+
+Login accepts only `email` and `password`.
 
 They return a 15-minute access token in JSON and set the rotating refresh token as an `HttpOnly` cookie. Send the access token as `Authorization: Bearer ACCESS_TOKEN`. Browser calls to login, refresh, and logout must use `credentials: 'include'`.
 
@@ -79,7 +82,7 @@ After registering the first account, bootstrap only that account directly in Pos
 
 ```sql
 UPDATE users
-SET role = 'super_admin', updated_at = now()
+SET role = 'super_admin', tenant_id = NULL, updated_at = now()
 WHERE email = 'owner@example.com';
 ```
 
@@ -114,7 +117,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-Run migrations as a separate release step before starting a new API version. Do not use schema push against a production database. No product tables have been invented in this initial scaffold.
+Run migrations as a separate release step before starting a new API version. Do not use schema push against a production database. The schema contains tenants, medicine batches, code jobs, individual code units, users, refresh sessions, and code audit events.
 
 ## Low-cost GCP deployment
 

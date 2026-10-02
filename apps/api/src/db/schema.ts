@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -17,6 +18,20 @@ import type { CodePrintOptions, PrintReport } from '@qrgenerator/contracts';
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLES);
 
+export const tenants = pgTable(
+  'tenants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 120 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex('tenants_name_lower_unique').on(sql`lower(${table.name})`),
+  ],
+);
+
 export const users = pgTable(
   'users',
   {
@@ -24,6 +39,9 @@ export const users = pgTable(
     email: varchar('email', { length: 320 }).notNull(),
     passwordHash: text('password_hash').notNull(),
     role: userRoleEnum('role').default('tenant_user').notNull(),
+    tenantId: uuid('tenant_id').references(() => tenants.id, {
+      onDelete: 'restrict',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -34,6 +52,11 @@ export const users = pgTable(
   (table) => [
     uniqueIndex('users_email_lower_unique').on(sql`lower(${table.email})`),
     index('users_role_idx').on(table.role),
+    index('users_tenant_id_idx').on(table.tenantId),
+    check(
+      'users_tenant_role',
+      sql`(${table.role} = 'super_admin' and ${table.tenantId} is null) or (${table.role} <> 'super_admin' and ${table.tenantId} is not null)`,
+    ),
   ],
 );
 
@@ -62,8 +85,44 @@ export const refreshSessions = pgTable(
 
 export type UserRecord = typeof users.$inferSelect;
 export type RefreshSessionRecord = typeof refreshSessions.$inferSelect;
+export type TenantRecord = typeof tenants.$inferSelect;
 
 export const codeStatusEnum = pgEnum('code_status', ['active', 'revoked']);
+
+export const batches = pgTable(
+  'batches',
+  {
+    batchNumber: varchar('batch_number', { length: 48 }).primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'restrict' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    slug: varchar('slug', { length: 300 }).notNull(),
+    medicineName: varchar('medicine_name', { length: 160 }).notNull(),
+    medicineType: varchar('medicine_type', { length: 120 }).notNull(),
+    manufactureDate: date('manufacture_date', { mode: 'string' }).notNull(),
+    expiryDate: date('expiry_date', { mode: 'string' }).notNull(),
+    cautions: jsonb('cautions').$type<string[]>().notNull(),
+    variants: jsonb('variants').$type<string[]>().notNull(),
+    usages: jsonb('usages').$type<string[]>().notNull(),
+    dosages: jsonb('dosages').$type<string[]>().notNull(),
+    eligibleUsers: jsonb('eligible_users').$type<string[]>().notNull(),
+    sideEffects: jsonb('side_effects').$type<string[]>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('batches_tenant_created_idx').on(table.tenantId, table.createdAt),
+    index('batches_slug_idx').on(table.slug),
+    check(
+      'batches_date_order',
+      sql`${table.expiryDate} > ${table.manufactureDate}`,
+    ),
+  ],
+);
 
 export const codeJobs = pgTable(
   'code_jobs',
@@ -74,7 +133,9 @@ export const codeJobs = pgTable(
       .references(() => users.id, { onDelete: 'restrict' }),
     idempotencyKey: uuid('idempotency_key').notNull(),
     requestHash: varchar('request_hash', { length: 64 }).notNull(),
-    reference: varchar('reference', { length: 80 }),
+    batchNumber: varchar('batch_number', { length: 48 })
+      .notNull()
+      .references(() => batches.batchNumber, { onDelete: 'restrict' }),
     quantity: integer('quantity').notNull(),
     options: jsonb('options').$type<CodePrintOptions>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -86,6 +147,7 @@ export const codeJobs = pgTable(
       table.ownerId,
       table.idempotencyKey,
     ),
+    index('code_jobs_batch_number_idx').on(table.batchNumber),
     check('code_jobs_quantity_range', sql`${table.quantity} between 1 and 50`),
   ],
 );
@@ -151,3 +213,4 @@ export const codeEvents = pgTable(
 );
 export type CodeJobRecord = typeof codeJobs.$inferSelect;
 export type CodeUnitRecord = typeof codeUnits.$inferSelect;
+export type BatchRecord = typeof batches.$inferSelect;

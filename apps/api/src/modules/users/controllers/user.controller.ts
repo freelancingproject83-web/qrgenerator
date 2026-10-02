@@ -13,6 +13,9 @@ export class UserController {
     return reply.send({ user });
   };
 
+  list = async (request: FastifyRequest) =>
+    this.userService.listUsers(request.user.sub);
+
   promote = async (request: FastifyRequest, reply: FastifyReply) => {
     const { userId } = userIdParamsSchema.parse(request.params);
     const { role } = updateUserRoleInputSchema.parse(request.body);

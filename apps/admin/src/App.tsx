@@ -1,13 +1,18 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   authResponseSchema,
+  batchSchema,
   codeJobResponseSchema,
   codePreviewResponseSchema,
-  codeUnitResponseSchema,
+  tenantSchema,
+  userSchema,
   type AuthResponse,
+  type Batch,
   type CodeJobResponse,
   type CodePrintOptions,
   type CodePreviewResponse,
+  type Tenant,
+  type User,
 } from '@qrgenerator/contracts';
 
 const apiBase = (
@@ -41,7 +46,6 @@ async function failureMessage(response: Response) {
 }
 
 let sessionRestore: Promise<AuthResponse | null> | undefined;
-
 function restoreSession() {
   sessionRestore ??= request('/auth/refresh', { method: 'POST' })
     .then(async (response) =>
@@ -53,152 +57,665 @@ function restoreSession() {
 
 export function App() {
   const [session, setSession] = useState<AuthResponse | null | undefined>();
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authBusy, setAuthBusy] = useState(false);
-  const [authError, setAuthError] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [tenantId, setTenantId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    let active = true;
-    void restoreSession().then((restored) => {
-      if (active) setSession(restored);
-    });
-    return () => {
-      active = false;
-    };
+    void restoreSession().then(setSession);
   }, []);
+
+  useEffect(() => {
+    if (session !== null) return;
+    void request('/tenants')
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as { tenants: unknown[] })
+          : { tenants: [] },
+      )
+      .then(({ tenants }) =>
+        setTenants(tenants.map((tenant) => tenantSchema.parse(tenant))),
+      );
+  }, [mode, session]);
 
   async function authenticate(event: FormEvent) {
     event.preventDefault();
-    setAuthBusy(true);
-    setAuthError('');
+    setBusy(true);
+    setError('');
     try {
-      const response = await request(`/auth/${authMode}`, {
+      const response = await request(`/auth/${mode}`, {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          ...(mode === 'register' ? { tenantId } : {}),
+        }),
       });
       if (!response.ok) throw new Error(await failureMessage(response));
       setSession(authResponseSchema.parse(await response.json()));
       setPassword('');
-    } catch (error) {
-      setAuthError(
-        error instanceof Error ? error.message : 'Authentication failed',
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : 'Authentication failed',
       );
     } finally {
-      setAuthBusy(false);
+      setBusy(false);
     }
   }
 
-  async function logout() {
-    await request('/auth/logout', { method: 'POST' }).catch(() => undefined);
-    setSession(null);
-  }
-
-  if (session === undefined) {
+  if (session === undefined)
     return (
-      <main className="page centered">
-        <span className="eyebrow">QR Generator</span>
-        <h1>Restoring your session…</h1>
+      <main className="loading">
+        <span className="brand-mark">M</span>
+        <p>Preparing your workspace…</p>
       </main>
     );
-  }
-
-  if (!session) {
+  if (!session)
     return (
-      <main className="page auth-page">
-        <section className="hero">
-          <span className="eyebrow">Secure identifier workspace</span>
-          <h1>Issue codes that lead back to your registry.</h1>
-          <p>
-            Generate digitally verified QR or Data Matrix artwork, download it
-            at print size, and revoke an identifier when necessary.
-          </p>
+      <main className="auth-shell">
+        <section className="auth-story">
+          <span className="brand">MedTrace Registry</span>
+          <div>
+            <span className="eyebrow">
+              Medicine identity, beautifully controlled
+            </span>
+            <h1>From batch record to verified scan.</h1>
+            <p>
+              Create precise medicine records, issue print-ready identifiers,
+              and keep every tenant’s catalogue safely separated.
+            </p>
+          </div>
+          <div className="trust-row">
+            <span>Tenant isolated</span>
+            <span>Digitally verified</span>
+            <span>Print ready</span>
+          </div>
         </section>
-        <form className="panel auth-card" onSubmit={authenticate}>
-          <div className="tabs" role="tablist" aria-label="Account action">
+        <form className="auth-card" onSubmit={authenticate}>
+          <div className="tabs">
             <button
-              className={authMode === 'login' ? 'active' : ''}
               type="button"
-              onClick={() => setAuthMode('login')}
+              className={mode === 'login' ? 'active' : ''}
+              onClick={() => setMode('login')}
             >
               Sign in
             </button>
             <button
-              className={authMode === 'register' ? 'active' : ''}
               type="button"
-              onClick={() => setAuthMode('register')}
+              className={mode === 'register' ? 'active' : ''}
+              onClick={() => setMode('register')}
             >
               Create account
             </button>
           </div>
-          <label>
-            Email
+          <div>
+            <span className="eyebrow">Welcome</span>
+            <h2>
+              {mode === 'login'
+                ? 'Sign in to continue'
+                : 'Join your tenant workspace'}
+            </h2>
+          </div>
+          <Field label="Email address">
             <input
               required
               type="email"
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@company.com"
             />
-          </label>
-          <label>
-            Password
+          </Field>
+          <Field label="Password">
             <input
               required
               minLength={8}
               maxLength={128}
               type="password"
               autoComplete={
-                authMode === 'login' ? 'current-password' : 'new-password'
+                mode === 'login' ? 'current-password' : 'new-password'
               }
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+              placeholder="At least 8 characters"
             />
-          </label>
-          {authError && (
+          </Field>
+          {mode === 'register' && (
+            <Field label="Tenant">
+              <select
+                required
+                value={tenantId}
+                onChange={(event) => setTenantId(event.target.value)}
+              >
+                <option value="">Select your organisation</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </select>
+              <small>New accounts always start as tenant users.</small>
+            </Field>
+          )}
+          {error && (
             <p className="error" role="alert">
-              {authError}
+              {error}
             </p>
           )}
-          <button className="primary" disabled={authBusy} type="submit">
-            {authBusy
+          <button
+            className="primary wide"
+            disabled={busy || (mode === 'register' && !tenantId)}
+          >
+            {busy
               ? 'Please wait…'
-              : authMode === 'login'
-                ? 'Sign in'
+              : mode === 'login'
+                ? 'Enter workspace'
                 : 'Create account'}
           </button>
         </form>
       </main>
     );
-  }
+  return <Workspace session={session} setSession={setSession} />;
+}
 
+function Workspace({
+  session,
+  setSession,
+}: {
+  session: AuthResponse;
+  setSession: (value: AuthResponse | null) => void;
+}) {
+  const [view, setView] = useState<'batches' | 'create' | 'generate' | 'admin'>(
+    'batches',
+  );
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [selected, setSelected] = useState<Batch>();
+  const [error, setError] = useState('');
+  async function authenticated(path: string, init: RequestInit = {}) {
+    const send = (token: string) =>
+      request(path, {
+        ...init,
+        headers: { ...init.headers, Authorization: `Bearer ${token}` },
+      });
+    let response = await send(session.accessToken);
+    if (response.status !== 401) return response;
+    const refresh = await request('/auth/refresh', { method: 'POST' });
+    if (!refresh.ok) {
+      setSession(null);
+      return response;
+    }
+    const next = authResponseSchema.parse(await refresh.json());
+    setSession(next);
+    response = await send(next.accessToken);
+    return response;
+  }
+  async function loadBatches() {
+    const response = await authenticated('/batches');
+    if (!response.ok) throw new Error(await failureMessage(response));
+    setBatches(
+      ((await response.json()) as { batches: unknown[] }).batches.map((batch) =>
+        batchSchema.parse(batch),
+      ),
+    );
+  }
+  useEffect(() => {
+    void loadBatches().catch((caught) =>
+      setError(
+        caught instanceof Error ? caught.message : 'Could not load batches',
+      ),
+    );
+  }, []);
+  function openGenerator(batch: Batch) {
+    setSelected(batch);
+    setView('generate');
+  }
+  async function logout() {
+    await request('/auth/logout', { method: 'POST' }).catch(() => undefined);
+    setSession(null);
+  }
+  const canCreate = session.user.role === 'tenant_admin';
   return (
-    <Generator session={session} setSession={setSession} logout={logout} />
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark">M</span>
+          <div>
+            <strong>MedTrace</strong>
+            <small>Registry Console</small>
+          </div>
+        </div>
+        <nav>
+          <button
+            className={view === 'batches' ? 'active' : ''}
+            onClick={() => setView('batches')}
+          >
+            <span>◫</span>Batch catalogue
+          </button>
+          {canCreate && (
+            <button
+              className={view === 'create' ? 'active' : ''}
+              onClick={() => setView('create')}
+            >
+              <span>＋</span>Create batch
+            </button>
+          )}
+          {selected && canCreate && (
+            <button
+              className={view === 'generate' ? 'active' : ''}
+              onClick={() => setView('generate')}
+            >
+              <span>⌁</span>Code studio
+            </button>
+          )}
+          {session.user.role === 'super_admin' && (
+            <button
+              className={view === 'admin' ? 'active' : ''}
+              onClick={() => setView('admin')}
+            >
+              <span>◇</span>Tenant control
+            </button>
+          )}
+        </nav>
+        <div className="sidebar-user">
+          <div className="avatar">{session.user.email[0]?.toUpperCase()}</div>
+          <div>
+            <strong>{session.user.email}</strong>
+            <small>
+              {session.user.tenantName ?? 'Global administration'} ·{' '}
+              {session.user.role.replace('_', ' ')}
+            </small>
+          </div>
+          <button aria-label="Sign out" onClick={() => void logout()}>
+            ↗
+          </button>
+        </div>
+      </aside>
+      <main className="content">
+        {error && <p className="error global-error">{error}</p>}
+        {view === 'batches' && (
+          <BatchCatalogue
+            batches={batches}
+            canGenerate={canCreate}
+            onCreate={() => setView('create')}
+            onGenerate={openGenerator}
+          />
+        )}
+        {view === 'create' && canCreate && (
+          <BatchForm
+            authenticated={authenticated}
+            onCreated={(batch) => {
+              setBatches((current) => [batch, ...current]);
+              openGenerator(batch);
+            }}
+          />
+        )}
+        {view === 'generate' && selected && canCreate && (
+          <CodeStudio batch={selected} authenticated={authenticated} />
+        )}
+        {view === 'admin' && session.user.role === 'super_admin' && (
+          <SuperAdmin authenticated={authenticated} />
+        )}
+      </main>
+    </div>
   );
 }
 
-function Generator({
-  session,
-  setSession,
-  logout,
+function BatchCatalogue({
+  batches,
+  canGenerate,
+  onCreate,
+  onGenerate,
 }: {
-  session: AuthResponse;
-  setSession: (session: AuthResponse | null) => void;
-  logout: () => Promise<void>;
+  batches: Batch[];
+  canGenerate: boolean;
+  onCreate: () => void;
+  onGenerate: (batch: Batch) => void;
+}) {
+  return (
+    <>
+      <PageHead
+        eyebrow="Batch registry"
+        title="Medicine catalogue"
+        description="Every identifier begins with a complete, tenant-owned medicine batch record."
+        action={
+          canGenerate ? (
+            <button className="primary" onClick={onCreate}>
+              ＋ New medicine batch
+            </button>
+          ) : undefined
+        }
+      />
+      <section className="stat-grid">
+        <Stat label="Total batches" value={batches.length} />
+        <Stat
+          label="Issued identifiers"
+          value={batches.reduce((sum, batch) => sum + batch.codeCount, 0)}
+        />
+        <Stat
+          label="Generation jobs"
+          value={batches.reduce((sum, batch) => sum + batch.codeJobCount, 0)}
+        />
+      </section>
+      <section className="panel table-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>All batches</h2>
+            <p>
+              {canGenerate
+                ? 'Select a record to generate identifiers.'
+                : 'Read-only access for your tenant.'}
+            </p>
+          </div>
+        </div>
+        {batches.length ? (
+          <div className="batch-grid">
+            {batches.map((batch) => (
+              <article className="batch-card" key={batch.batchNumber}>
+                <div className="batch-card-top">
+                  <span className="medicine-icon">Rx</span>
+                  <span className="status-dot">Active</span>
+                </div>
+                <h3>{batch.medicineName}</h3>
+                <p>{batch.medicineType}</p>
+                <dl>
+                  <div>
+                    <dt>Batch number</dt>
+                    <dd>{batch.batchNumber}</dd>
+                  </div>
+                  <div>
+                    <dt>Expires</dt>
+                    <dd>
+                      {new Date(
+                        `${batch.expiryDate}T00:00:00`,
+                      ).toLocaleDateString()}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Codes</dt>
+                    <dd>{batch.codeCount}</dd>
+                  </div>
+                  <div>
+                    <dt>Tenant</dt>
+                    <dd>{batch.tenantName}</dd>
+                  </div>
+                </dl>
+                {canGenerate && (
+                  <button
+                    className="soft wide"
+                    onClick={() => onGenerate(batch)}
+                  >
+                    Open code studio →
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="empty">
+            <span>◇</span>
+            <h3>No batches yet</h3>
+            <p>
+              {canGenerate
+                ? 'Create the first medicine batch to unlock code generation.'
+                : 'Your tenant administrator has not created a batch yet.'}
+            </p>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
+const listFields = [
+  ['cautions', 'Cautions', 'Keep away from children'],
+  ['variants', 'Available variants / strengths', 'Paracetamol 500 mg tablet'],
+  ['usages', 'Usages', 'Temporary relief of fever'],
+  [
+    'dosages',
+    'Dosage guidance',
+    'Use only as directed by a qualified professional',
+  ],
+  ['eligibleUsers', 'Who can use it', 'Adults when medically appropriate'],
+  ['sideEffects', 'Possible side effects', 'Nausea or allergic reaction'],
+] as const;
+
+function BatchForm({
+  authenticated,
+  onCreated,
+}: {
+  authenticated: (path: string, init?: RequestInit) => Promise<Response>;
+  onCreated: (batch: Batch) => void;
+}) {
+  const [fields, setFields] = useState({
+    medicineName: '',
+    medicineType: '',
+    manufactureDate: '',
+    expiryDate: '',
+    cautions: [''],
+    variants: [''],
+    usages: [''],
+    dosages: [''],
+    eligibleUsers: [''],
+    sideEffects: [''],
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const payload = {
+        ...fields,
+        ...Object.fromEntries(
+          listFields.map(([key]) => [
+            key,
+            fields[key].map((value) => value.trim()).filter(Boolean),
+          ]),
+        ),
+      };
+      const response = await authenticated('/batches', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(await failureMessage(response));
+      onCreated(
+        batchSchema.parse(
+          ((await response.json()) as { batch: unknown }).batch,
+        ),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : 'Could not create batch',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <PageHead
+        eyebrow="Step 1 of 2"
+        title="Create a medicine batch"
+        description="Record the medicine profile first. A collision-proof batch number is assigned only after validation."
+      />
+      <form className="panel medicine-form" onSubmit={submit}>
+        <div className="form-section">
+          <div className="section-number">01</div>
+          <div className="section-copy">
+            <h2>Medicine identity</h2>
+            <p>
+              The name and type form a friendly slug; the generated batch number
+              remains the only database identity.
+            </p>
+          </div>
+          <div className="form-fields two">
+            <Field label="Medicine name">
+              <input
+                required
+                minLength={2}
+                maxLength={160}
+                value={fields.medicineName}
+                onChange={(event) =>
+                  setFields({ ...fields, medicineName: event.target.value })
+                }
+                placeholder="e.g. Calpol"
+              />
+            </Field>
+            <Field label="Type of medicine">
+              <input
+                required
+                minLength={2}
+                maxLength={120}
+                value={fields.medicineType}
+                onChange={(event) =>
+                  setFields({ ...fields, medicineType: event.target.value })
+                }
+                placeholder="e.g. Paracetamol tablet"
+              />
+            </Field>
+          </div>
+        </div>
+        <div className="form-section">
+          <div className="section-number">02</div>
+          <div className="section-copy">
+            <h2>Lifecycle dates</h2>
+            <p>Expiry must be later than manufacture date.</p>
+          </div>
+          <div className="form-fields two">
+            <Field label="Manufacture date">
+              <input
+                required
+                type="date"
+                value={fields.manufactureDate}
+                onChange={(event) =>
+                  setFields({ ...fields, manufactureDate: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Date of expiry">
+              <input
+                required
+                type="date"
+                min={fields.manufactureDate || undefined}
+                value={fields.expiryDate}
+                onChange={(event) =>
+                  setFields({ ...fields, expiryDate: event.target.value })
+                }
+              />
+            </Field>
+          </div>
+        </div>
+        <div className="form-section">
+          <div className="section-number">03</div>
+          <div className="section-copy">
+            <h2>Clinical information</h2>
+            <p>
+              Add one clear point per row. Every section requires at least one
+              point.
+            </p>
+          </div>
+          <div className="list-fields">
+            {listFields.map(([key, label, placeholder]) => (
+              <PointList
+                key={key}
+                label={label}
+                placeholder={placeholder}
+                values={fields[key]}
+                onChange={(values) => setFields({ ...fields, [key]: values })}
+              />
+            ))}
+          </div>
+        </div>
+        {error && <p className="error">{error}</p>}
+        <div className="form-footer">
+          <p>
+            The batch number is server generated and protected by a database
+            primary key.
+          </p>
+          <button className="primary" disabled={busy}>
+            {busy ? 'Creating batch…' : 'Create batch & continue →'}
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function PointList({
+  label,
+  placeholder,
+  values,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  return (
+    <fieldset className="point-list">
+      <legend>{label}</legend>
+      {values.map((value, index) => (
+        <div className="point-row" key={index}>
+          <span>{index + 1}</span>
+          <input
+            required
+            value={value}
+            maxLength={500}
+            placeholder={placeholder}
+            onChange={(event) =>
+              onChange(
+                values.map((item, itemIndex) =>
+                  itemIndex === index ? event.target.value : item,
+                ),
+              )
+            }
+          />
+          {values.length > 1 && (
+            <button
+              type="button"
+              aria-label={`Remove ${label} point`}
+              onClick={() =>
+                onChange(values.filter((_, itemIndex) => itemIndex !== index))
+              }
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        className="add-point"
+        type="button"
+        onClick={() => onChange([...values, ''])}
+      >
+        ＋ Add another point
+      </button>
+    </fieldset>
+  );
+}
+
+function CodeStudio({
+  batch,
+  authenticated,
+}: {
+  batch: Batch;
+  authenticated: (path: string, init?: RequestInit) => Promise<Response>;
 }) {
   const [format, setFormat] = useState<'qr' | 'data_matrix'>('qr');
   const [quantity, setQuantity] = useState(1);
-  const [reference, setReference] = useState('');
   const [moduleSizeMm, setModuleSizeMm] = useState(0.25);
   const [printerDpi, setPrinterDpi] = useState(600);
   const [errorCorrection, setErrorCorrection] = useState<'M' | 'Q' | 'H'>('M');
   const [preview, setPreview] = useState<CodePreviewResponse>();
   const [job, setJob] = useState<CodeJobResponse>();
-  const [busy, setBusy] = useState<'preview' | 'issue' | string>();
+  const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [reasons, setReasons] = useState<Record<string, string>>({});
-
   const print = useMemo<CodePrintOptions>(
     () =>
       format === 'qr'
@@ -210,29 +727,8 @@ function Generator({
             errorCorrection,
           }
         : { format, moduleSizeMm, printerDpi, printMode: 'standard' },
-    [errorCorrection, format, moduleSizeMm, printerDpi],
+    [format, moduleSizeMm, printerDpi, errorCorrection],
   );
-
-  async function authenticated(path: string, init: RequestInit = {}) {
-    const send = (accessToken: string) =>
-      request(path, {
-        ...init,
-        headers: { ...init.headers, Authorization: `Bearer ${accessToken}` },
-      });
-    let response = await send(session.accessToken);
-    if (response.status !== 401) return response;
-
-    const refresh = await request('/auth/refresh', { method: 'POST' });
-    if (!refresh.ok) {
-      setSession(null);
-      return response;
-    }
-    const next = authResponseSchema.parse(await refresh.json());
-    setSession(next);
-    response = await send(next.accessToken);
-    return response;
-  }
-
   async function run(action: 'preview' | 'issue') {
     setBusy(action);
     setError('');
@@ -247,152 +743,86 @@ function Generator({
               : {},
           body: JSON.stringify(
             action === 'preview'
-              ? print
-              : {
-                  quantity,
-                  ...(reference.trim() ? { reference: reference.trim() } : {}),
-                  print,
-                },
+              ? { batchNumber: batch.batchNumber, print }
+              : { quantity, batchNumber: batch.batchNumber, print },
           ),
         },
       );
       if (!response.ok) throw new Error(await failureMessage(response));
-      if (action === 'preview') {
+      if (action === 'preview')
         setPreview(codePreviewResponseSchema.parse(await response.json()));
-      } else {
-        setJob(codeJobResponseSchema.parse(await response.json()));
-      }
+      else setJob(codeJobResponseSchema.parse(await response.json()));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Request failed');
+      setError(caught instanceof Error ? caught.message : 'Generation failed');
     } finally {
-      setBusy(undefined);
+      setBusy('');
     }
   }
-
-  async function download(id: string, format: 'svg' | 'pdf') {
-    setBusy(`${id}-${format}`);
+  async function download(id: string, type: 'svg' | 'pdf') {
+    setBusy(`${id}-${type}`);
     setError('');
     try {
-      const response = await authenticated(`/codes/${id}/artwork.${format}`);
+      const response = await authenticated(`/codes/${id}/artwork.${type}`);
       if (!response.ok) throw new Error(await failureMessage(response));
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
       link.href = url;
-      link.download = `unit-${id}.${format}`;
+      link.download = `${batch.batchNumber}-${id}.${type}`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Download failed');
     } finally {
-      setBusy(undefined);
+      setBusy('');
     }
   }
-
-  async function revoke(id: string) {
-    const reason = reasons[id]?.trim();
-    if (!reason) return setError('Enter a revocation reason first.');
-    setBusy(`${id}-revoke`);
-    setError('');
-    try {
-      const response = await authenticated(`/codes/${id}/revoke`, {
-        method: 'POST',
-        body: JSON.stringify({ reason }),
-      });
-      if (!response.ok) throw new Error(await failureMessage(response));
-      const body = (await response.json()) as { code: unknown };
-      const updated = codeUnitResponseSchema.parse(body.code);
-      setJob((current) =>
-        current
-          ? {
-              ...current,
-              codes: current.codes.map((code) =>
-                code.id === id ? updated : code,
-              ),
-            }
-          : current,
-      );
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Revocation failed');
-    } finally {
-      setBusy(undefined);
-    }
-  }
-
   return (
-    <main className="workspace">
-      <header className="topbar">
-        <div>
-          <span className="eyebrow">QR Generator</span>
-          <strong>{session.user.email}</strong>
-        </div>
-        <button
-          className="secondary"
-          onClick={() => void logout()}
-          type="button"
-        >
-          Sign out
-        </button>
-      </header>
-
-      <section className="intro">
-        <div>
-          <h1>Issue a batch of identifiers.</h1>
-          <p>
-            Preview sizing first, then issue unique registry-backed codes. A
-            digital decode is verified before any identifier is saved.
-          </p>
-        </div>
-        <span className="safety">Physical print qualification required</span>
-      </section>
-
-      <div className="work-grid">
-        <form
-          className="panel controls"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <h2>Artwork settings</h2>
-          <div className="field-grid">
-            <label>
-              Format
-              <select
-                value={format}
-                onChange={(event) =>
-                  setFormat(event.target.value as typeof format)
-                }
-              >
-                <option value="qr">QR code</option>
-                <option value="data_matrix">Data Matrix</option>
-              </select>
-            </label>
-            {format === 'qr' && (
-              <label>
-                Error correction
-                <select
-                  value={errorCorrection}
-                  onChange={(event) =>
-                    setErrorCorrection(
-                      event.target.value as typeof errorCorrection,
-                    )
-                  }
-                >
-                  <option value="M">M · about 15% damage recovery</option>
-                  <option value="Q">Q · about 25% damage recovery</option>
-                  <option value="H">H · about 30% damage recovery</option>
-                </select>
-                <span className="field-help">
-                  {errorCorrection === 'M' &&
-                    'M makes the smallest QR and is the normal default.'}
-                  {errorCorrection === 'Q' &&
-                    'Q is more resistant to scratches and missing print, but makes a larger QR.'}
-                  {errorCorrection === 'H' &&
-                    'H gives the most recovery, but produces the largest and densest QR.'}
-                </span>
-              </label>
-            )}
-            <label>
-              Module size (mm)
+    <>
+      <PageHead
+        eyebrow="Step 2 of 2 · Code studio"
+        title={batch.medicineName}
+        description={`${batch.batchNumber} · ${batch.medicineType}`}
+      />
+      <div className="studio-grid">
+        <section className="panel">
+          <h2>Identifier settings</h2>
+          <div className="format-switch">
+            <button
+              className={format === 'qr' ? 'active' : ''}
+              onClick={() => setFormat('qr')}
+            >
+              <strong>QR</strong>
+              <small>Best native camera support</small>
+            </button>
+            <button
+              className={format === 'data_matrix' ? 'active' : ''}
+              onClick={() => setFormat('data_matrix')}
+            >
+              <strong>Data Matrix</strong>
+              <small>Compact ECC200 symbol</small>
+            </button>
+          </div>
+          <div className="form-fields two">
+            <Field label="Quantity">
               <input
-                required
+                type="number"
+                min="1"
+                max="50"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.valueAsNumber)}
+              />
+            </Field>
+            <Field label="Printer DPI">
+              <input
+                type="number"
+                min="200"
+                max="2400"
+                value={printerDpi}
+                onChange={(event) => setPrinterDpi(event.target.valueAsNumber)}
+              />
+            </Field>
+            <Field label="Module size (mm)">
+              <input
                 type="number"
                 min="0.125"
                 max="1"
@@ -402,68 +832,37 @@ function Generator({
                   setModuleSizeMm(event.target.valueAsNumber)
                 }
               />
-              <span className="field-help">
-                Allowed: 0.125–1.000 mm per module. The generator rounds upward
-                to whole printer dots.
-              </span>
-            </label>
-            <label>
-              Printer DPI
-              <input
-                required
-                type="number"
-                min="200"
-                max="2400"
-                step="1"
-                value={printerDpi}
-                onChange={(event) => setPrinterDpi(event.target.valueAsNumber)}
-              />
-              <span className="field-help">
-                Allowed: 200–2400 DPI. Standard mode keeps at least four printer
-                dots per module.
-              </span>
-            </label>
-            <label>
-              Quantity
-              <input
-                required
-                type="number"
-                min="1"
-                max="50"
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.valueAsNumber)}
-              />
-            </label>
-            <label>
-              Batch reference <small>Optional</small>
-              <input
-                maxLength={80}
-                placeholder="LOT-2026-001"
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-              />
-            </label>
+            </Field>
+            {format === 'qr' && (
+              <Field label="Error correction">
+                <select
+                  value={errorCorrection}
+                  onChange={(event) =>
+                    setErrorCorrection(
+                      event.target.value as typeof errorCorrection,
+                    )
+                  }
+                >
+                  <option value="M">M · compact default</option>
+                  <option value="Q">Q · stronger recovery</option>
+                  <option value="H">H · maximum recovery</option>
+                </select>
+              </Field>
+            )}
           </div>
-          <aside className="size-guide">
-            <strong>How print size works</strong>
+          <div className="info-box">
+            <strong>Exact printer geometry</strong>
             <p>
-              The module setting controls each black or white square—not the
-              full code. The final width also includes every symbol module and
-              the mandatory blank quiet zone. Use <b>Preview size</b> for the
-              exact millimetre dimensions before issuing.
+              Artwork is rounded up to whole printer dots and independently
+              decoded before it can be issued.
             </p>
-          </aside>
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
+          </div>
+          {error && <p className="error">{error}</p>}
           <div className="actions">
             <button
-              className="secondary"
+              className="soft"
               disabled={Boolean(busy)}
               onClick={() => void run('preview')}
-              type="button"
             >
               {busy === 'preview' ? 'Rendering…' : 'Preview size'}
             </button>
@@ -471,144 +870,317 @@ function Generator({
               className="primary"
               disabled={Boolean(busy)}
               onClick={() => void run('issue')}
-              type="button"
             >
               {busy === 'issue'
                 ? 'Issuing…'
                 : `Issue ${quantity} code${quantity === 1 ? '' : 's'}`}
             </button>
           </div>
-        </form>
-
-        <section className="panel preview-panel">
-          <h2>Size proof</h2>
+        </section>
+        <section className="panel preview">
+          <h2>Print proof</h2>
           {preview ? (
             <>
               <div
                 className="artwork"
                 dangerouslySetInnerHTML={{ __html: preview.svg }}
               />
-              <dl className="metrics">
-                <div>
-                  <dt>Print at 100% scale</dt>
-                  <dd>
-                    {preview.print.totalSizeMm} × {preview.print.totalSizeMm} mm
-                  </dd>
-                </div>
-                <div>
-                  <dt>Actual module</dt>
-                  <dd>{preview.print.actualModuleSizeMm} mm</dd>
-                </div>
-                <div>
-                  <dt>Quiet zone per side</dt>
-                  <dd>{preview.print.quietZoneMmPerSide} mm</dd>
-                </div>
-                <div>
-                  <dt>Printer grid</dt>
-                  <dd>{preview.print.dotsPerModule} dots/module</dd>
-                </div>
-              </dl>
-              <div
-                className={`print-summary ${preview.print.totalSizeMm < 8 ? 'caution' : ''}`}
-              >
+              <div className="proof-size">
+                <span>Final artwork</span>
                 <strong>
-                  Full artwork: {preview.print.totalSizeMm} ×{' '}
-                  {preview.print.totalSizeMm} mm
+                  {preview.print.totalSizeMm} × {preview.print.totalSizeMm} mm
                 </strong>
-                <p>
-                  Print the SVG or PDF at 100% actual size. Disable fit-to-page,
-                  scaling, and image smoothing.
-                </p>
-                {preview.print.totalSizeMm < 8 && (
-                  <p>
-                    This is below 8 mm. It passes digital decoding, but small
-                    codes on reflective blister foil may fail on real phones.
-                    Where space permits, start around 8–10 mm overall at 600 DPI
-                    and qualify a physical sample.
-                  </p>
-                )}
+                <small>
+                  {preview.print.dotsPerModule} dots/module ·{' '}
+                  {preview.print.actualModuleSizeMm} mm module
+                </small>
               </div>
-              <p className="notice">{preview.message}</p>
             </>
           ) : (
-            <p className="empty">
-              Choose settings and render an unissued size proof.
-            </p>
+            <div className="empty compact-empty">
+              <span>⌁</span>
+              <p>Preview the exact physical size before issuing.</p>
+            </div>
           )}
         </section>
       </div>
-
       {job && (
-        <section className="results">
-          <div className="results-heading">
+        <section className="panel issued">
+          <div className="panel-heading">
             <div>
-              <span className="eyebrow">Issued batch</span>
-              <h2>{job.reference ?? job.id}</h2>
+              <span className="eyebrow">Issued successfully</span>
+              <h2>{job.batchNumber}</h2>
             </div>
             <span>
-              {job.codes.length} unique identifier
-              {job.codes.length === 1 ? '' : 's'}
+              {job.codes.length} unique code{job.codes.length === 1 ? '' : 's'}
             </span>
           </div>
-          <div className="code-list">
+          <div className="issued-grid">
             {job.codes.map((code) => (
-              <article className="code-card" key={code.id}>
-                <div className="code-meta">
+              <article key={code.id}>
+                <div>
                   <strong>Unit {code.position}</strong>
                   <span className={`badge ${code.status}`}>{code.status}</span>
                 </div>
                 <a href={code.scanUrl} target="_blank" rel="noreferrer">
                   {code.scanUrl}
                 </a>
-                <div className="actions compact">
+                <div className="actions">
                   <button
-                    className="secondary"
-                    disabled={Boolean(busy) || code.status === 'revoked'}
+                    className="soft"
+                    disabled={Boolean(busy)}
                     onClick={() => void download(code.id, 'svg')}
-                    type="button"
                   >
                     SVG
                   </button>
                   <button
-                    className="secondary"
-                    disabled={Boolean(busy) || code.status === 'revoked'}
+                    className="soft"
+                    disabled={Boolean(busy)}
                     onClick={() => void download(code.id, 'pdf')}
-                    type="button"
                   >
                     PDF
                   </button>
                 </div>
-                {code.status === 'active' ? (
-                  <div className="revoke-row">
-                    <input
-                      aria-label={`Revocation reason for unit ${code.position}`}
-                      maxLength={300}
-                      placeholder="Reason for revocation"
-                      value={reasons[code.id] ?? ''}
-                      onChange={(event) =>
-                        setReasons((current) => ({
-                          ...current,
-                          [code.id]: event.target.value,
-                        }))
-                      }
-                    />
-                    <button
-                      className="danger"
-                      disabled={Boolean(busy)}
-                      onClick={() => void revoke(code.id)}
-                      type="button"
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                ) : (
-                  <p className="notice">Revoked: {code.revokeReason}</p>
-                )}
               </article>
             ))}
           </div>
         </section>
       )}
-    </main>
+    </>
+  );
+}
+
+function SuperAdmin({
+  authenticated,
+}: {
+  authenticated: (path: string, init?: RequestInit) => Promise<Response>;
+}) {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [pendingRole, setPendingRole] = useState<{
+    user: User;
+    role: User['role'];
+  }>();
+  const [roleBusy, setRoleBusy] = useState(false);
+  async function load() {
+    const [tenantResponse, userResponse] = await Promise.all([
+      authenticated('/tenants'),
+      authenticated('/admin/users'),
+    ]);
+    if (!tenantResponse.ok || !userResponse.ok)
+      throw new Error('Could not load tenant administration');
+    setTenants(
+      ((await tenantResponse.json()) as { tenants: unknown[] }).tenants.map(
+        (item) => tenantSchema.parse(item),
+      ),
+    );
+    setUsers(
+      ((await userResponse.json()) as { users: unknown[] }).users.map((item) =>
+        userSchema.parse(item),
+      ),
+    );
+  }
+  useEffect(() => {
+    void load().catch((caught) =>
+      setError(caught instanceof Error ? caught.message : 'Could not load'),
+    );
+  }, []);
+  async function createTenant(event: FormEvent) {
+    event.preventDefault();
+    const response = await authenticated('/admin/tenants', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    if (!response.ok) return setError(await failureMessage(response));
+    setName('');
+    await load();
+  }
+  async function role(userId: string, nextRole: User['role']) {
+    setRoleBusy(true);
+    setError('');
+    const response = await authenticated(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role: nextRole }),
+    });
+    if (!response.ok) {
+      setError(await failureMessage(response));
+      setRoleBusy(false);
+      return;
+    }
+    await load();
+    setPendingRole(undefined);
+    setRoleBusy(false);
+  }
+  return (
+    <>
+      <PageHead
+        eyebrow="Super administration"
+        title="Tenant control"
+        description="Create tenant workspaces and control user authority across the registry."
+      />
+      {error && (
+        <p className="error admin-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="admin-grid">
+        <form className="panel" onSubmit={createTenant}>
+          <h2>Add tenant</h2>
+          <Field label="Organisation name">
+            <input
+              required
+              minLength={2}
+              maxLength={120}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Tenant legal or trading name"
+            />
+          </Field>
+          <button className="primary wide">Create tenant</button>
+          <div className="tenant-pills">
+            {tenants.map((tenant) => (
+              <span key={tenant.id}>{tenant.name}</span>
+            ))}
+          </div>
+        </form>
+        <section className="panel">
+          <h2>Users</h2>
+          <div className="user-list">
+            {users.map((user) => (
+              <div key={user.id}>
+                <div>
+                  <strong>{user.email}</strong>
+                  <small>
+                    {user.tenantName ?? 'Global'} ·{' '}
+                    {user.role.replace('_', ' ')}
+                  </small>
+                </div>
+                {user.role !== 'super_admin' && (
+                  <select
+                    aria-label={`Role for ${user.email}`}
+                    value={user.role}
+                    onChange={(event) =>
+                      setPendingRole({
+                        user,
+                        role: event.target.value as User['role'],
+                      })
+                    }
+                  >
+                    <option value="tenant_user">Tenant user</option>
+                    <option value="tenant_admin">Tenant admin</option>
+                    <option value="super_admin">Super admin</option>
+                  </select>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      {pendingRole && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target && !roleBusy)
+              setPendingRole(undefined);
+          }}
+        >
+          <section
+            className="confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="role-confirm-title"
+          >
+            <div className="modal-icon">◇</div>
+            <span className="eyebrow">Confirm role change</span>
+            <h2 id="role-confirm-title">
+              Make this user {roleLabel(pendingRole.role)}?
+            </h2>
+            <p>
+              <strong>{pendingRole.user.email}</strong> will become{' '}
+              <strong>{roleLabel(pendingRole.role)}</strong>
+              {pendingRole.role === 'super_admin'
+                ? ' with access to every tenant and user.'
+                : pendingRole.role === 'tenant_admin'
+                  ? ` for ${pendingRole.user.tenantName ?? 'their tenant'}, with permission to create batches and issue codes.`
+                  : ' with read-only access to their tenant batches.'}
+            </p>
+            <div className="modal-summary">
+              <span>Current role</span>
+              <strong>{roleLabel(pendingRole.user.role)}</strong>
+              <span>New role</span>
+              <strong>{roleLabel(pendingRole.role)}</strong>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="soft"
+                disabled={roleBusy}
+                onClick={() => setPendingRole(undefined)}
+              >
+                Cancel
+              </button>
+              <button
+                className={
+                  pendingRole.role === 'super_admin'
+                    ? 'primary danger-action'
+                    : 'primary'
+                }
+                disabled={roleBusy}
+                onClick={() => void role(pendingRole.user.id, pendingRole.role)}
+              >
+                {roleBusy
+                  ? 'Updating role…'
+                  : `Yes, make ${roleLabel(pendingRole.role)}`}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
+function roleLabel(role: User['role']) {
+  return role.replace('_', ' ');
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+function PageHead({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="page-head">
+      <div>
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {action}
+    </header>
+  );
+}
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <article className="stat">
+      <span>{label}</span>
+      <strong>{value.toLocaleString()}</strong>
+    </article>
   );
 }

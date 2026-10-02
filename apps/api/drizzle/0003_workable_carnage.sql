@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD CONSTRAINT "users_tenant_role" CHECK (("users"."role" = 'super_admin' and "users"."tenant_id" is null) or ("users"."role" <> 'super_admin' and "users"."tenant_id" is not null));

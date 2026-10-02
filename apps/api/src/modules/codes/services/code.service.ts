@@ -6,8 +6,13 @@ import {
 } from '@qrgenerator/contracts';
 import type { CodePrintOptions, CreateCodeJob } from '@qrgenerator/contracts';
 import type { CodeJobRecord, CodeUnitRecord } from '../../../db/schema.js';
-import { NotFoundError, UnauthorizedError } from '../../../errors/app-error.js';
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../../../errors/app-error.js';
 import type { UserRepository } from '../../users/repositories/user.repository.js';
+import type { BatchRepository } from '../../batches/repositories/batch.repository.js';
 import { CodeError } from '../errors/code.error.js';
 import type {
   CodeRepository,
@@ -27,6 +32,7 @@ export class CodeService {
   constructor(
     private readonly repository: CodeRepository,
     private readonly users: UserRepository,
+    private readonly batches: BatchRepository,
     private readonly scanOrigin: string,
     private readonly tokenFactory = createCodeToken,
   ) {}
@@ -48,11 +54,24 @@ export class CodeService {
   }
 
   private async requireUser(ownerId: string) {
-    if (!(await this.users.findById(ownerId))) throw new UnauthorizedError();
+    const user = await this.users.findById(ownerId);
+    if (!user) throw new UnauthorizedError();
+    return user;
   }
 
-  async preview(ownerId: string, options: CodePrintOptions) {
-    await this.requireUser(ownerId);
+  async preview(
+    ownerId: string,
+    batchNumber: string,
+    options: CodePrintOptions,
+  ) {
+    const actor = await this.requireUser(ownerId);
+    if (actor.role !== 'tenant_admin')
+      throw new ForbiddenError('Only a tenant admin can generate artwork');
+    if (
+      !actor.tenantId ||
+      !(await this.batches.find(batchNumber, actor.tenantId))
+    )
+      throw new NotFoundError('Batch not found');
     return this.generate(async () => {
       const scanUrl = scanUrlFor(this.scanOrigin, createCodeToken());
       const result = await renderCode(scanUrl, options);
@@ -88,7 +107,7 @@ export class CodeService {
   private jobResponse(stored: StoredJob, replayed: boolean) {
     return codeJobResponseSchema.parse({
       id: stored.job.id,
-      reference: stored.job.reference,
+      batchNumber: stored.job.batchNumber,
       createdAt: stored.job.createdAt.toISOString(),
       quantity: stored.job.quantity,
       replayed,
@@ -107,7 +126,11 @@ export class CodeService {
   }
 
   async create(ownerId: string, key: string, input: CreateCodeJob) {
-    await this.requireUser(ownerId);
+    const actor = await this.requireUser(ownerId);
+    if (actor.role !== 'tenant_admin' || !actor.tenantId)
+      throw new ForbiddenError('Only a tenant admin can issue codes');
+    if (!(await this.batches.find(input.batchNumber, actor.tenantId)))
+      throw new NotFoundError('Batch not found');
     // Parsed Zod objects have stable field order and applied defaults.
     const hash = createHash('sha256')
       .update(JSON.stringify(input))
@@ -122,7 +145,7 @@ export class CodeService {
           ownerId,
           idempotencyKey: key,
           requestHash: hash,
-          reference: input.reference ?? null,
+          batchNumber: input.batchNumber,
           quantity: input.quantity,
           options: input.print,
           createdAt: now,
@@ -167,22 +190,33 @@ export class CodeService {
   }
 
   async job(ownerId: string, id: string) {
-    await this.requireUser(ownerId);
-    const stored = await this.repository.findJob(ownerId, id);
+    const actor = await this.requireUser(ownerId);
+    if (actor.role === 'tenant_user') throw new ForbiddenError();
+    const stored = await this.repository.findJob(
+      actor.role === 'super_admin' ? undefined : (actor.tenantId ?? '__none__'),
+      id,
+    );
     if (!stored) throw new NotFoundError('Code job not found');
     return this.jobResponse(stored, false);
   }
   private async ownedUnit(ownerId: string, id: string) {
-    await this.requireUser(ownerId);
-    const unit = await this.repository.findUnit(ownerId, id);
+    const actor = await this.requireUser(ownerId);
+    const unit = await this.repository.findUnit(
+      actor.role === 'super_admin' ? undefined : (actor.tenantId ?? '__none__'),
+      id,
+    );
     if (!unit) throw new NotFoundError('Code not found');
     return unit;
   }
   async unit(ownerId: string, id: string) {
+    const actor = await this.requireUser(ownerId);
+    if (actor.role === 'tenant_user') throw new ForbiddenError();
     return this.unitResponse(await this.ownedUnit(ownerId, id));
   }
 
   async artwork(ownerId: string, id: string, format: 'svg' | 'pdf') {
+    const actor = await this.requireUser(ownerId);
+    if (actor.role === 'tenant_user') throw new ForbiddenError();
     const unit = await this.ownedUnit(ownerId, id);
     if (unit.status === 'revoked')
       throw new CodeError(
@@ -205,23 +239,46 @@ export class CodeService {
     return data;
   }
   async revoke(ownerId: string, id: string, reason: string) {
-    await this.requireUser(ownerId);
-    const unit = await this.repository.revoke(ownerId, id, reason);
+    const actor = await this.requireUser(ownerId);
+    if (actor.role !== 'tenant_admin' && actor.role !== 'super_admin')
+      throw new ForbiddenError('Only an administrator can revoke codes');
+    const unit = await this.repository.revoke(
+      ownerId,
+      actor.role === 'super_admin' ? undefined : (actor.tenantId ?? '__none__'),
+      id,
+      reason,
+    );
     if (!unit) throw new NotFoundError('Code not found');
     return this.unitResponse(unit);
   }
   async publicLookup(token: string) {
-    const unit = await this.repository.findPublic(token);
-    if (!unit) throw new NotFoundError('Code not found');
+    const found = await this.repository.findPublic(token);
+    if (!found) throw new NotFoundError('Code not found');
+    const { unit, batch, tenantName } = found;
     return publicCodeResponseSchema.parse({
       code: {
         token: unit.token,
         status: unit.status,
-        detailsStatus: 'not_published',
+        detailsStatus: 'published',
         message:
           unit.status === 'revoked'
             ? 'This code has been revoked. Contact the supplier for verification.'
-            : 'This identifier is registered, but medicine details have not been published. This does not verify authenticity or medicine safety.',
+            : 'This identifier is registered to the medicine batch shown below. A code can still be copied, so this page alone does not prove authenticity.',
+        batch: {
+          batchNumber: batch.batchNumber,
+          slug: batch.slug,
+          medicineName: batch.medicineName,
+          medicineType: batch.medicineType,
+          manufactureDate: batch.manufactureDate,
+          expiryDate: batch.expiryDate,
+          cautions: batch.cautions,
+          variants: batch.variants,
+          usages: batch.usages,
+          dosages: batch.dosages,
+          eligibleUsers: batch.eligibleUsers,
+          sideEffects: batch.sideEffects,
+          tenantName,
+        },
       },
     });
   }

@@ -13,6 +13,8 @@ export const userSchema = z.object({
   id: z.uuid(),
   email: z.email(),
   role: userRoleSchema,
+  tenantId: z.uuid().nullable(),
+  tenantName: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -20,9 +22,23 @@ export const userSchema = z.object({
 export const createAccountInputSchema = z.object({
   email: z.string().trim().toLowerCase().max(320).pipe(z.email()),
   password: z.string().min(8).max(128),
+  tenantId: z.uuid(),
 });
 
-export const loginInputSchema = createAccountInputSchema;
+export const loginInputSchema = z.object({
+  email: z.string().trim().toLowerCase().max(320).pipe(z.email()),
+  password: z.string().min(8).max(128),
+});
+
+export const tenantSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const createTenantInputSchema = z.strictObject({
+  name: z.string().trim().min(2).max(120),
+});
 
 export const authResponseSchema = z.object({
   accessToken: z.string().min(1),
@@ -31,7 +47,7 @@ export const authResponseSchema = z.object({
 });
 
 export const updateUserRoleInputSchema = z.object({
-  role: z.enum(['tenant_admin', 'super_admin']),
+  role: z.enum(['tenant_user', 'tenant_admin', 'super_admin']),
 });
 
 export const userIdParamsSchema = z.object({
@@ -49,3 +65,4 @@ export type CreateAccountInput = z.infer<typeof createAccountInputSchema>;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 export type AuthResponse = z.infer<typeof authResponseSchema>;
 export type UpdateUserRoleInput = z.infer<typeof updateUserRoleInputSchema>;
+export type Tenant = z.infer<typeof tenantSchema>;

@@ -1,6 +1,6 @@
 import {
   codeIdParamsSchema,
-  codePrintOptionsSchema,
+  codePreviewInputSchema,
   createCodeJobSchema,
   idempotencyKeySchema,
   publicCodeParamsSchema,
@@ -11,11 +11,10 @@ import type { CodeService } from '../services/code.service.js';
 
 export class CodeController {
   constructor(private readonly service: CodeService) {}
-  preview = async (request: FastifyRequest) =>
-    this.service.preview(
-      request.user.sub,
-      codePrintOptionsSchema.parse(request.body),
-    );
+  preview = async (request: FastifyRequest) => {
+    const { batchNumber, print } = codePreviewInputSchema.parse(request.body);
+    return this.service.preview(request.user.sub, batchNumber, print);
+  };
   create = async (request: FastifyRequest, reply: FastifyReply) => {
     const result = await this.service.create(
       request.user.sub,

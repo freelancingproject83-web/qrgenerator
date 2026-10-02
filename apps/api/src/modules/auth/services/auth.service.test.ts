@@ -1,17 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UserRecord } from '../../../db/schema.js';
 import { UnauthorizedError } from '../../../errors/app-error.js';
 import type { PasswordHasher } from '../../../utils/password.js';
 import { hashRefreshToken } from '../../../utils/tokens.js';
-import type { UserRepository } from '../../users/repositories/user.repository.js';
+import type {
+  UserRepository,
+  UserWithTenant,
+} from '../../users/repositories/user.repository.js';
 import { AuthService } from './auth.service.js';
+import type { TenantRepository } from '../../tenants/repositories/tenant.repository.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
-const user: UserRecord = {
+const tenantId = '9d2953d8-f03a-4aba-93f8-bf87338b0257';
+const user: UserWithTenant = {
   id: '7ccafba9-27de-43bf-a5d2-1b1333338c57',
   email: 'person@example.com',
   passwordHash: 'stored-password-hash',
   role: 'tenant_user',
+  tenantId,
+  tenantName: 'Example Pharma',
   createdAt: now,
   updatedAt: now,
 };
@@ -20,6 +26,7 @@ function createRepository(): UserRepository {
   return {
     findByEmail: vi.fn(),
     findById: vi.fn(),
+    list: vi.fn(),
     createUser: vi.fn(),
     updateRole: vi.fn(),
     createRefreshSession: vi.fn(),
@@ -40,6 +47,15 @@ describe('AuthService', () => {
     passwords = { hash: vi.fn(), verify: vi.fn() };
     service = new AuthService(
       repository,
+      {
+        list: vi.fn(),
+        findById: vi.fn().mockResolvedValue({
+          id: tenantId,
+          name: 'Example Pharma',
+          createdAt: now,
+        }),
+        create: vi.fn(),
+      } satisfies TenantRepository,
       passwords,
       { sign: ({ id, role }) => `signed:${id}:${role}` },
       900,
@@ -53,13 +69,14 @@ describe('AuthService', () => {
     vi.mocked(repository.createUser).mockResolvedValue(user);
 
     const result = await service.register(
-      { email: user.email, password: 'correct-password' },
+      { email: user.email, password: 'correct-password', tenantId },
       { ipAddress: '127.0.0.1' },
     );
 
     expect(repository.createUser).toHaveBeenCalledWith({
       email: user.email,
       passwordHash: 'new-password-hash',
+      tenantId,
     });
     expect(repository.createRefreshSession).toHaveBeenCalledWith(
       expect.objectContaining({

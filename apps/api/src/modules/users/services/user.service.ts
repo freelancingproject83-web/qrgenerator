@@ -17,10 +17,17 @@ export class UserService {
     return toUser(user);
   }
 
+  async listUsers(actorId: string): Promise<{ users: User[] }> {
+    const actor = await this.repository.findById(actorId);
+    if (!actor) throw new UnauthorizedError();
+    if (actor.role !== 'super_admin') throw new ForbiddenError();
+    return { users: (await this.repository.list()).map(toUser) };
+  }
+
   async promoteUser(
     actorId: string,
     targetUserId: string,
-    role: Extract<UserRole, 'tenant_admin' | 'super_admin'>,
+    role: UserRole,
   ): Promise<User> {
     const actor = await this.repository.findById(actorId);
     if (!actor) throw new UnauthorizedError();
@@ -31,8 +38,8 @@ export class UserService {
 
     const target = await this.repository.findById(targetUserId);
     if (!target) throw new NotFoundError('User not found');
-    if (target.role !== 'tenant_user') {
-      throw new ConflictError('Only tenant users can be promoted');
+    if (role !== 'super_admin' && !target.tenantId) {
+      throw new ConflictError('A tenant role requires a tenant assignment');
     }
 
     const updatedUser = await this.repository.updateRole(targetUserId, role);

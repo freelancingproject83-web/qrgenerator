@@ -27,7 +27,7 @@ const instructions = [
   'Do not duplicate a unit code across tablets. Bind positions to the actual manufacturing records before release. Reprints of a unit retain the same identity; control and destroy rejected or surplus impressions.',
   'Qualify on the actual foil, ink, press, sealing and cutting process. Test representative phones and cameras at realistic distances, angles, lighting and after handling/aging. Data Matrix may require a compatible scanner app.',
   'Have a qualified print provider verify symbol quality using the applicable ISO/IEC 15415 process and agree the acceptance grade and sampling plan. A successful software decode is not print qualification.',
-  'These identifiers currently have no published medicine details and do not prove authenticity or medicine safety. Do not release on saleable medicines until approved data, packaging and applicable regulatory checks are complete.',
+  'The public page shows the medicine data supplied for the linked batch, but the identifier does not by itself prove authenticity or medicine safety. Do not release on saleable medicines until the data, packaging and applicable regulatory checks are approved.',
 ];
 
 export function svgFor(

@@ -15,6 +15,20 @@
       "when": 1790528683600,
       "tag": "0001_bitter_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790963702412,
+      "tag": "0002_youthful_lenny_balinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790963999343,
+      "tag": "0003_workable_carnage",
+      "breakpoints": true
     }
   ]
 }

@@ -29,11 +29,23 @@ import {
   type PasswordHasher,
 } from './utils/password.js';
 import type { UserRepository } from './modules/users/repositories/user.repository.js';
+import { BatchController } from './modules/batches/controllers/batch.controller.js';
+import { DrizzleBatchRepository } from './modules/batches/repositories/batch.repository.js';
+import { registerBatchRoutes } from './modules/batches/routes/batch.routes.js';
+import { BatchService } from './modules/batches/services/batch.service.js';
+import { TenantController } from './modules/tenants/controllers/tenant.controller.js';
+import {
+  DrizzleTenantRepository,
+  type TenantRepository,
+} from './modules/tenants/repositories/tenant.repository.js';
+import { registerTenantRoutes } from './modules/tenants/routes/tenant.routes.js';
+import { TenantService } from './modules/tenants/services/tenant.service.js';
 
 interface AppOverrides {
   codeRepository?: CodeRepository;
   userRepository?: UserRepository;
   passwordHasher?: PasswordHasher;
+  tenantRepository?: TenantRepository;
 }
 
 export async function buildApp(
@@ -52,6 +64,7 @@ export async function buildApp(
   await app.register(cors, {
     origin: config.CORS_ORIGINS,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'OPTIONS'],
   });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -72,8 +85,12 @@ export async function buildApp(
 
   const userRepository =
     overrides.userRepository ?? new DrizzleUserRepository(db);
+  const tenantRepository =
+    overrides.tenantRepository ?? new DrizzleTenantRepository(db);
+  const batchRepository = new DrizzleBatchRepository(db);
   const authService = new AuthService(
     userRepository,
+    tenantRepository,
     overrides.passwordHasher ?? defaultPasswordHasher,
     {
       sign: ({ id, role }) =>
@@ -89,12 +106,29 @@ export async function buildApp(
     new CodeService(
       overrides.codeRepository ?? new DrizzleCodeRepository(db),
       userRepository,
+      batchRepository,
       config.PUBLIC_SCAN_ORIGIN,
     ),
+  );
+  const batchController = new BatchController(
+    new BatchService(batchRepository, userRepository),
+  );
+  const tenantController = new TenantController(
+    new TenantService(tenantRepository, userRepository),
   );
   await app.register(
     async (codeApp) =>
       registerCodeRoutes(codeApp, codeController, authenticate),
+    { prefix: '/api/v1' },
+  );
+  await app.register(
+    async (batchApp) =>
+      registerBatchRoutes(batchApp, batchController, authenticate),
+    { prefix: '/api/v1' },
+  );
+  await app.register(
+    async (tenantApp) =>
+      registerTenantRoutes(tenantApp, tenantController, authenticate),
     { prefix: '/api/v1' },
   );
 

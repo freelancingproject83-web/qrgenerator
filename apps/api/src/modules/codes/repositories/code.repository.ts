@@ -1,26 +1,41 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../db/schema.js';
-import { codeEvents, codeJobs, codeUnits } from '../../../db/schema.js';
+import {
+  batches,
+  codeEvents,
+  codeJobs,
+  codeUnits,
+  tenants,
+} from '../../../db/schema.js';
 
 export interface StoredJob {
   job: schema.CodeJobRecord;
   units: schema.CodeUnitRecord[];
 }
+export interface PublicCodeRecord {
+  unit: schema.CodeUnitRecord;
+  batch: schema.BatchRecord;
+  tenantName: string;
+}
 export interface CodeRepository {
   findIdempotent(ownerId: string, key: string): Promise<StoredJob | undefined>;
-  findJob(ownerId: string, id: string): Promise<StoredJob | undefined>;
+  findJob(
+    tenantId: string | undefined,
+    id: string,
+  ): Promise<StoredJob | undefined>;
   findUnit(
-    ownerId: string,
+    tenantId: string | undefined,
     id: string,
   ): Promise<schema.CodeUnitRecord | undefined>;
-  findPublic(token: string): Promise<schema.CodeUnitRecord | undefined>;
+  findPublic(token: string): Promise<PublicCodeRecord | undefined>;
   create(
     job: schema.CodeJobRecord,
     units: schema.CodeUnitRecord[],
   ): Promise<void>;
   revoke(
-    ownerId: string,
+    actorId: string,
+    tenantId: string | undefined,
     id: string,
     reason: string,
   ): Promise<schema.CodeUnitRecord | undefined>;
@@ -54,26 +69,45 @@ export class DrizzleCodeRepository implements CodeRepository {
     });
     return this.withUnits(job);
   }
-  async findJob(ownerId: string, id: string) {
-    return this.withUnits(
-      await this.db.query.codeJobs.findFirst({
-        where: and(eq(codeJobs.ownerId, ownerId), eq(codeJobs.id, id)),
-      }),
-    );
+  async findJob(tenantId: string | undefined, id: string) {
+    const [result] = await this.db
+      .select({ job: codeJobs })
+      .from(codeJobs)
+      .innerJoin(batches, eq(codeJobs.batchNumber, batches.batchNumber))
+      .where(
+        and(
+          eq(codeJobs.id, id),
+          tenantId ? eq(batches.tenantId, tenantId) : undefined,
+        ),
+      )
+      .limit(1);
+    return this.withUnits(result?.job);
   }
-  async findUnit(ownerId: string, id: string) {
+  async findUnit(tenantId: string | undefined, id: string) {
     const [result] = await this.db
       .select({ unit: codeUnits })
       .from(codeUnits)
       .innerJoin(codeJobs, eq(codeJobs.id, codeUnits.jobId))
-      .where(and(eq(codeJobs.ownerId, ownerId), eq(codeUnits.id, id)))
+      .innerJoin(batches, eq(codeJobs.batchNumber, batches.batchNumber))
+      .where(
+        and(
+          eq(codeUnits.id, id),
+          tenantId ? eq(batches.tenantId, tenantId) : undefined,
+        ),
+      )
       .limit(1);
     return result?.unit;
   }
   async findPublic(token: string) {
-    return this.db.query.codeUnits.findFirst({
-      where: eq(codeUnits.token, token),
-    });
+    const [result] = await this.db
+      .select({ unit: codeUnits, batch: batches, tenantName: tenants.name })
+      .from(codeUnits)
+      .innerJoin(codeJobs, eq(codeUnits.jobId, codeJobs.id))
+      .innerJoin(batches, eq(codeJobs.batchNumber, batches.batchNumber))
+      .innerJoin(tenants, eq(batches.tenantId, tenants.id))
+      .where(eq(codeUnits.token, token))
+      .limit(1);
+    return result;
   }
   async create(job: schema.CodeJobRecord, units: schema.CodeUnitRecord[]) {
     await this.db.transaction(async (tx) => {
@@ -84,14 +118,25 @@ export class DrizzleCodeRepository implements CodeRepository {
         .values({ jobId: job.id, actorId: job.ownerId, action: 'job_created' });
     });
   }
-  async revoke(ownerId: string, id: string, reason: string) {
+  async revoke(
+    actorId: string,
+    tenantId: string | undefined,
+    id: string,
+    reason: string,
+  ) {
     return this.db.transaction(async (tx) => {
       // Owner check and row lock are in the same transaction as the state change.
       const [found] = await tx
         .select({ unit: codeUnits })
         .from(codeUnits)
         .innerJoin(codeJobs, eq(codeJobs.id, codeUnits.jobId))
-        .where(and(eq(codeUnits.id, id), eq(codeJobs.ownerId, ownerId)))
+        .innerJoin(batches, eq(codeJobs.batchNumber, batches.batchNumber))
+        .where(
+          and(
+            eq(codeUnits.id, id),
+            tenantId ? eq(batches.tenantId, tenantId) : undefined,
+          ),
+        )
         .for('update', { of: codeUnits });
       if (!found || found.unit.status === 'revoked') return found?.unit;
       const [unit] = await tx
@@ -102,7 +147,7 @@ export class DrizzleCodeRepository implements CodeRepository {
       await tx.insert(codeEvents).values({
         jobId: found.unit.jobId,
         unitId: id,
-        actorId: ownerId,
+        actorId,
         action: 'unit_revoked',
         detail: reason,
       });

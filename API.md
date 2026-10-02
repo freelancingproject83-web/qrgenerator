@@ -23,13 +23,13 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 type UserRole = 'super_admin' | 'tenant_admin' | 'tenant_user';
 ```
 
-| Value          | Meaning                                                         |
-| -------------- | --------------------------------------------------------------- |
-| `super_admin`  | Platform-level administrator. Can promote tenant users.         |
-| `tenant_admin` | Tenant administrator. No tenant-management endpoints exist yet. |
-| `tenant_user`  | Default role assigned by public registration.                   |
+| Value          | Meaning                                                    |
+| -------------- | ---------------------------------------------------------- |
+| `super_admin`  | Creates tenants, sees all batches, and manages user roles. |
+| `tenant_admin` | Creates medicine batches and issues codes for its tenant.  |
+| `tenant_user`  | Read-only access to its own tenant's batch catalogue.      |
 
-Clients cannot choose a role during registration. The API always persists `tenant_user`, even if an extra `role` property is submitted.
+Clients cannot choose a role during registration. A valid `tenantId` is required and the API always persists `tenant_user`.
 
 ## Shared models
 
@@ -40,6 +40,8 @@ interface User {
   id: string; // UUID
   email: string;
   role: UserRole;
+  tenantId: string | null;
+  tenantName: string | null;
   createdAt: string; // ISO 8601 date-time
   updatedAt: string; // ISO 8601 date-time
 }
@@ -52,6 +54,8 @@ Example:
   "id": "7ccafba9-27de-43bf-a5d2-1b1333338c57",
   "email": "person@example.com",
   "role": "tenant_user",
+  "tenantId": "9d2953d8-f03a-4aba-93f8-bf87338b0257",
+  "tenantName": "Example Pharma",
   "createdAt": "2026-01-01T10:30:00.000Z",
   "updatedAt": "2026-01-01T10:30:00.000Z"
 }
@@ -153,16 +157,22 @@ Common codes:
 
 ## Endpoint summary
 
-| Method  | Endpoint                           | Authentication           | Success        |
-| ------- | ---------------------------------- | ------------------------ | -------------- |
-| `GET`   | `/health`                          | None                     | `200`          |
-| `GET`   | `/ready`                           | None                     | `200` or `503` |
-| `POST`  | `/api/v1/auth/register`            | Public                   | `201`          |
-| `POST`  | `/api/v1/auth/login`               | Public                   | `200`          |
-| `POST`  | `/api/v1/auth/refresh`             | Refresh cookie           | `200`          |
-| `POST`  | `/api/v1/auth/logout`              | Refresh cookie optional  | `204`          |
-| `GET`   | `/api/v1/users/me`                 | Access token             | `200`          |
-| `PATCH` | `/api/v1/admin/users/:userId/role` | Super admin access token | `200`          |
+| Method  | Endpoint                           | Authentication            | Success        |
+| ------- | ---------------------------------- | ------------------------- | -------------- |
+| `GET`   | `/health`                          | None                      | `200`          |
+| `GET`   | `/ready`                           | None                      | `200` or `503` |
+| `POST`  | `/api/v1/auth/register`            | Public                    | `201`          |
+| `POST`  | `/api/v1/auth/login`               | Public                    | `200`          |
+| `POST`  | `/api/v1/auth/refresh`             | Refresh cookie            | `200`          |
+| `POST`  | `/api/v1/auth/logout`              | Refresh cookie optional   | `204`          |
+| `GET`   | `/api/v1/users/me`                 | Access token              | `200`          |
+| `GET`   | `/api/v1/tenants`                  | Public                    | `200`          |
+| `POST`  | `/api/v1/admin/tenants`            | Super admin access token  | `201`          |
+| `GET`   | `/api/v1/admin/users`              | Super admin access token  | `200`          |
+| `PATCH` | `/api/v1/admin/users/:userId/role` | Super admin access token  | `200`          |
+| `GET`   | `/api/v1/batches`                  | Access token              | `200`          |
+| `GET`   | `/api/v1/batches/:batchNumber`     | Access token              | `200`          |
+| `POST`  | `/api/v1/batches`                  | Tenant admin access token | `201`          |
 
 ## Health endpoints
 
@@ -218,6 +228,7 @@ Request:
 interface CreateAccountRequest {
   email: string; // Valid email, maximum 320 characters
   password: string; // 8-128 characters
+  tenantId: string; // UUID selected from GET /api/v1/tenants
 }
 ```
 
@@ -226,7 +237,8 @@ The email is trimmed and converted to lowercase.
 ```json
 {
   "email": "person@example.com",
-  "password": "correct-horse-battery-staple"
+  "password": "correct-horse-battery-staple",
+  "tenantId": "9d2953d8-f03a-4aba-93f8-bf87338b0257"
 }
 ```
 
@@ -240,6 +252,8 @@ Response `201`:
     "id": "7ccafba9-27de-43bf-a5d2-1b1333338c57",
     "email": "person@example.com",
     "role": "tenant_user",
+    "tenantId": "9d2953d8-f03a-4aba-93f8-bf87338b0257",
+    "tenantName": "Example Pharma",
     "createdAt": "2026-01-01T10:30:00.000Z",
     "updatedAt": "2026-01-01T10:30:00.000Z"
   }
@@ -248,7 +262,8 @@ Response `201`:
 
 Expected errors:
 
-- `400 VALIDATION_ERROR`: invalid email or password length.
+- `400 VALIDATION_ERROR`: invalid email, password length, or tenant UUID.
+- `404 NOT_FOUND`: selected tenant does not exist.
 - `409 CONFLICT`: an account already uses the email.
 - `429 TOO_MANY_REQUESTS`: registration limit exceeded.
 
@@ -257,7 +272,7 @@ Frontend example:
 ```ts
 const response = await apiRequest('/api/v1/auth/register', {
   method: 'POST',
-  body: JSON.stringify({ email, password }),
+  body: JSON.stringify({ email, password, tenantId }),
 });
 ```
 
@@ -364,6 +379,8 @@ Response `200`:
     "id": "7ccafba9-27de-43bf-a5d2-1b1333338c57",
     "email": "person@example.com",
     "role": "tenant_user",
+    "tenantId": "9d2953d8-f03a-4aba-93f8-bf87338b0257",
+    "tenantName": "Example Pharma",
     "createdAt": "2026-01-01T10:30:00.000Z",
     "updatedAt": "2026-01-01T10:30:00.000Z"
   }
@@ -391,7 +408,7 @@ PATCH /api/v1/admin/users/:userId/role
 Authorization: Bearer ACCESS_TOKEN
 ```
 
-Promotes a `tenant_user` to either `tenant_admin` or `super_admin`. The API loads the acting user from PostgreSQL and requires their current role to be `super_admin`; it does not rely only on the role embedded in the access token.
+Changes a user's role to `tenant_user`, `tenant_admin`, or `super_admin`. The API loads the acting user from PostgreSQL and requires their current role to be `super_admin`; it does not rely only on the role embedded in the access token.
 
 Path parameter:
 
@@ -403,7 +420,7 @@ Request:
 
 ```ts
 interface PromoteUserRequest {
-  role: 'tenant_admin' | 'super_admin';
+  role: 'tenant_user' | 'tenant_admin' | 'super_admin';
 }
 ```
 
@@ -428,9 +445,9 @@ Response `200`:
 Rules:
 
 - Only a current `super_admin` can perform the operation.
-- Only a current `tenant_user` can be promoted.
 - A super admin cannot change their own role through this endpoint.
-- This endpoint does not support demotion.
+- Assigning `super_admin` removes the user's tenant association.
+- A tenant role requires the user to have an existing tenant association.
 
 Expected errors:
 
@@ -462,9 +479,39 @@ const response = await apiRequest(`/api/v1/admin/users/${userId}/role`, {
 
 The source-of-truth runtime schemas and inferred TypeScript types live in `packages/contracts/src/index.ts` and can be imported from `@qrgenerator/contracts` inside this monorepo.
 
+## Tenant and medicine-batch endpoints
+
+`GET /api/v1/tenants` is public because registration uses it to populate the tenant dropdown. Only a super admin can create a tenant with `POST /api/v1/admin/tenants` and `{ "name": "Example Pharma" }`.
+
+All newly registered accounts belong to the selected tenant and start as `tenant_user`. Tenant isolation is enforced by repository queries: a tenant user or tenant admin never receives another tenant's batches. A super admin may list all batches.
+
+Only a `tenant_admin` can create a batch:
+
+```http
+POST /api/v1/batches
+Authorization: Bearer ACCESS_TOKEN
+```
+
+```json
+{
+  "medicineName": "Paracetamol",
+  "medicineType": "Tablet",
+  "manufactureDate": "2026-10-01",
+  "expiryDate": "2028-09-30",
+  "cautions": ["Keep away from children"],
+  "variants": ["500 mg", "650 mg"],
+  "usages": ["Temporary relief of fever"],
+  "dosages": ["Use only as directed by a qualified professional"],
+  "eligibleUsers": ["Adults when medically appropriate"],
+  "sideEffects": ["Nausea", "Allergic reaction"]
+}
+```
+
+The server generates `batchNumber`; clients cannot supply it. It is the PostgreSQL primary key. A random candidate is retried on conflict, and the primary-key constraint makes duplicate committed batch numbers impossible. `slug` is derived from medicine name and type for display only and is never used as record identity.
+
 ## Identifier endpoints
 
-All management endpoints require `Authorization: Bearer ACCESS_TOKEN`. Codes and jobs are scoped to the authenticated owner. Send JSON request bodies with `Content-Type: application/json`.
+All management endpoints require `Authorization: Bearer ACCESS_TOKEN`. Codes and jobs are scoped through their batch's tenant. Tenant users cannot generate or download artwork; tenant admins operate only within their tenant; super admins can inspect all tenant data. Send JSON request bodies with `Content-Type: application/json`.
 
 ### Preview artwork
 
@@ -472,21 +519,24 @@ All management endpoints require `Authorization: Bearer ACCESS_TOKEN`. Codes and
 POST /api/v1/code-jobs/preview
 ```
 
-The request is a print-options object. A preview is an unissued sizing proof: its random URL is not stored and must never be printed on a product.
+The request identifies an existing batch and contains its print options. The server verifies that the tenant admin owns the batch. A preview is an unissued sizing proof: its random URL is not stored and must never be printed on a product.
 
 ```json
 {
-  "format": "qr",
-  "errorCorrection": "M",
-  "moduleSizeMm": 0.25,
-  "printerDpi": 600,
-  "printMode": "standard"
+  "batchNumber": "BAT-20261002-AB12CD34EF56AB12CD34",
+  "print": {
+    "format": "qr",
+    "errorCorrection": "M",
+    "moduleSizeMm": 0.25,
+    "printerDpi": 600,
+    "printMode": "standard"
+  }
 }
 ```
 
 `format` may be `qr` or `data_matrix`. QR accepts error correction `L`, `M`, `Q`, or `H`; level `L` requires `printMode: "experimental"`. The response contains `issued: false`, an SVG string, the temporary scan URL, and the complete print report.
 
-### Issue a batch
+### Issue codes for a batch
 
 ```http
 POST /api/v1/code-jobs
@@ -496,7 +546,7 @@ Idempotency-Key: RANDOM_UUID
 ```json
 {
   "quantity": 10,
-  "reference": "LOT-2026-001",
+  "batchNumber": "BAT-20261002-AB12CD34EF56AB12CD34",
   "print": {
     "format": "qr",
     "errorCorrection": "M",
@@ -518,7 +568,7 @@ GET /api/v1/code-jobs/:id
 GET /api/v1/codes/:id
 ```
 
-These return only records owned by the authenticated user. A missing or unowned identifier returns `404`.
+These return records inside the authenticated administrator's tenant. A missing or cross-tenant identifier returns `404`; super admins may access all tenants.
 
 ### Download issued artwork
 
@@ -547,4 +597,4 @@ The reason must contain 1–300 characters. Revocation is permanent and changes 
 GET /api/v1/public/codes/:token
 ```
 
-This endpoint does not require authentication. It returns whether a registered token is `active` or `revoked`. Medicine details are currently `not_published`; a successful lookup does not prove authenticity or safety. Unknown and malformed identifiers return `404` and `400`, respectively.
+This endpoint does not require authentication. It returns whether a registered token is `active` or `revoked` together with the associated medicine batch, including dates, cautions, variants, usages, dosage guidance, eligible users, side effects, and tenant name. A successful lookup does not by itself prove authenticity because a printed code can be copied. Unknown and malformed identifiers return `404` and `400`, respectively.

@@ -5,7 +5,7 @@ import type {
   User,
   UserRole,
 } from '@qrgenerator/contracts';
-import type { UserRecord } from '../../../db/schema.js';
+import type { UserWithTenant } from '../../users/repositories/user.repository.js';
 import { ConflictError, UnauthorizedError } from '../../../errors/app-error.js';
 import type { PasswordHasher } from '../../../utils/password.js';
 import { createRefreshToken, hashRefreshToken } from '../../../utils/tokens.js';
@@ -13,6 +13,8 @@ import type {
   NewRefreshSession,
   UserRepository,
 } from '../../users/repositories/user.repository.js';
+import type { TenantRepository } from '../../tenants/repositories/tenant.repository.js';
+import { NotFoundError } from '../../../errors/app-error.js';
 
 export interface RequestMetadata {
   ipAddress?: string;
@@ -27,11 +29,13 @@ export interface AuthResult extends AuthResponse {
   refreshToken: string;
 }
 
-function toUser(user: UserRecord): User {
+function toUser(user: UserWithTenant): User {
   return {
     id: user.id,
     email: user.email,
     role: user.role,
+    tenantId: user.tenantId,
+    tenantName: user.tenantName,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -40,6 +44,7 @@ function toUser(user: UserRecord): User {
 export class AuthService {
   constructor(
     private readonly repository: UserRepository,
+    private readonly tenants: TenantRepository,
     private readonly passwords: PasswordHasher,
     private readonly accessTokens: AccessTokenSigner,
     private readonly accessTokenTtlSeconds: number,
@@ -50,16 +55,19 @@ export class AuthService {
     input: CreateAccountInput,
     metadata: RequestMetadata,
   ): Promise<AuthResult> {
+    if (!(await this.tenants.findById(input.tenantId)))
+      throw new NotFoundError('Selected tenant does not exist');
     const existingUser = await this.repository.findByEmail(input.email);
     if (existingUser)
       throw new ConflictError('An account with this email already exists');
 
     const passwordHash = await this.passwords.hash(input.password);
-    let user: UserRecord;
+    let user: UserWithTenant;
     try {
       user = await this.repository.createUser({
         email: input.email,
         passwordHash,
+        tenantId: input.tenantId,
       });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -127,7 +135,7 @@ export class AuthService {
   }
 
   private async createAuthenticatedSession(
-    user: UserRecord,
+    user: UserWithTenant,
     metadata: RequestMetadata,
   ): Promise<AuthResult> {
     const refreshToken = createRefreshToken();
@@ -150,7 +158,7 @@ export class AuthService {
     };
   }
 
-  private authResult(user: UserRecord, refreshToken: string): AuthResult {
+  private authResult(user: UserWithTenant, refreshToken: string): AuthResult {
     return {
       accessToken: this.accessTokens.sign({ id: user.id, role: user.role }),
       expiresIn: this.accessTokenTtlSeconds,

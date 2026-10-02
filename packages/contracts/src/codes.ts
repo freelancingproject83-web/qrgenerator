@@ -19,7 +19,11 @@ export const codePrintOptionsSchema = z.discriminatedUnion('format', [
 ]);
 export const createCodeJobSchema = z.strictObject({
   quantity: z.number().int().min(1).max(50).default(10),
-  reference: z.string().trim().min(1).max(80).optional(),
+  batchNumber: z.string().min(1).max(48),
+  print: codePrintOptionsSchema,
+});
+export const codePreviewInputSchema = z.strictObject({
+  batchNumber: z.string().min(1).max(48),
   print: codePrintOptionsSchema,
 });
 export const revokeCodeSchema = z.strictObject({
@@ -68,7 +72,7 @@ export const codeUnitResponseSchema = z.object({
 });
 export const codeJobResponseSchema = z.object({
   id: z.uuid(),
-  reference: z.string().nullable(),
+  batchNumber: z.string(),
   createdAt: z.iso.datetime(),
   quantity: z.number().int(),
   replayed: z.boolean(),
@@ -85,12 +89,60 @@ export const publicCodeResponseSchema = z.object({
   code: z.object({
     token: codeTokenSchema,
     status: codeStatusSchema,
-    detailsStatus: z.literal('not_published'),
+    detailsStatus: z.literal('published'),
     message: z.string(),
+    batch: z.object({
+      batchNumber: z.string(),
+      slug: z.string(),
+      medicineName: z.string(),
+      medicineType: z.string(),
+      manufactureDate: z.iso.date(),
+      expiryDate: z.iso.date(),
+      cautions: z.array(z.string()),
+      variants: z.array(z.string()),
+      usages: z.array(z.string()),
+      dosages: z.array(z.string()),
+      eligibleUsers: z.array(z.string()),
+      sideEffects: z.array(z.string()),
+      tenantName: z.string(),
+    }),
   }),
+});
+
+const nonEmptyPoints = z
+  .array(z.string().trim().min(1).max(500))
+  .min(1)
+  .max(30);
+export const createBatchInputSchema = z.strictObject({
+  medicineName: z.string().trim().min(2).max(160),
+  medicineType: z.string().trim().min(2).max(120),
+  manufactureDate: z.iso.date(),
+  expiryDate: z.iso.date(),
+  cautions: nonEmptyPoints,
+  variants: nonEmptyPoints,
+  usages: nonEmptyPoints,
+  dosages: nonEmptyPoints,
+  eligibleUsers: nonEmptyPoints,
+  sideEffects: nonEmptyPoints,
+});
+export const batchSchema = createBatchInputSchema.extend({
+  batchNumber: z.string(),
+  slug: z.string(),
+  tenantId: z.uuid(),
+  tenantName: z.string(),
+  createdBy: z.uuid(),
+  createdAt: z.iso.datetime(),
+  codeJobCount: z.number().int().nonnegative(),
+  codeCount: z.number().int().nonnegative(),
+});
+export const batchNumberParamsSchema = z.object({
+  batchNumber: z.string().min(1).max(48),
 });
 export type CodePrintOptions = z.infer<typeof codePrintOptionsSchema>;
 export type CreateCodeJob = z.infer<typeof createCodeJobSchema>;
 export type PrintReport = z.infer<typeof printReportSchema>;
 export type CodeJobResponse = z.infer<typeof codeJobResponseSchema>;
 export type CodePreviewResponse = z.infer<typeof codePreviewResponseSchema>;
+export type CodePreviewInput = z.infer<typeof codePreviewInputSchema>;
+export type CreateBatchInput = z.infer<typeof createBatchInputSchema>;
+export type Batch = z.infer<typeof batchSchema>;

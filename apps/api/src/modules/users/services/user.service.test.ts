@@ -1,28 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UserRecord } from '../../../db/schema.js';
 import { ForbiddenError } from '../../../errors/app-error.js';
-import type { UserRepository } from '../repositories/user.repository.js';
+import type {
+  UserRepository,
+  UserWithTenant,
+} from '../repositories/user.repository.js';
 import { UserService } from './user.service.js';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
 
-function user(id: string, role: UserRecord['role']): UserRecord {
+function user(id: string, role: UserRecord['role']): UserWithTenant {
   return {
     id,
     email: `${id}@example.com`,
     passwordHash: 'hash',
     role,
+    tenantId:
+      role === 'super_admin' ? null : '9d2953d8-f03a-4aba-93f8-bf87338b0257',
+    tenantName: role === 'super_admin' ? null : 'Example Pharma',
     createdAt: now,
     updatedAt: now,
   };
 }
 
 function repositoryWithUsers(
-  usersById: Record<string, UserRecord>,
+  usersById: Record<string, UserWithTenant>,
 ): UserRepository {
   return {
     findByEmail: vi.fn(),
     findById: vi.fn((id) => Promise.resolve(usersById[id])),
+    list: vi.fn().mockResolvedValue(Object.values(usersById)),
     createUser: vi.fn(),
     updateRole: vi.fn((id, role) =>
       Promise.resolve(
