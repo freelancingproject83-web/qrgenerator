@@ -1,0 +1,110 @@
+services:
+  - type: web
+    name: medtrace-test-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    dockerCommand: >-
+      sh -c 'export CORS_ORIGINS="$PUBLIC_WEB_ORIGIN,$ADMIN_ORIGIN";
+      node apps/api/dist/migrate.js &&
+      exec node apps/api/dist/server.js'
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_POOL_MAX
+        value: 3
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medtrace-test-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: qrgenerator-api
+      - key: JWT_AUDIENCE
+        value: qrgenerator-apps
+      - key: PUBLIC_SCAN_ORIGIN
+        fromService:
+          type: web
+          name: medtrace-test-web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: PUBLIC_WEB_ORIGIN
+        fromService:
+          type: web
+          name: medtrace-test-web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: ADMIN_ORIGIN
+        fromService:
+          type: web
+          name: medtrace-test-admin
+          envVarKey: RENDER_EXTERNAL_URL
+
+  - type: web
+    name: medtrace-test-web
+    runtime: static
+    buildCommand: >-
+      npm ci &&
+      npm run build -w @qrgenerator/contracts &&
+      npm run build -w @qrgenerator/web
+    staticPublishPath: ./apps/web/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: medtrace-test-api
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow
+
+  - type: web
+    name: medtrace-test-admin
+    runtime: static
+    buildCommand: >-
+      npm ci &&
+      npm run build -w @qrgenerator/contracts &&
+      npm run build -w @qrgenerator/admin
+    staticPublishPath: ./apps/admin/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: medtrace-test-api
+          envVarKey: RENDER_EXTERNAL_URL
+    headers:
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex, nofollow
+
+databases:
+  - name: medtrace-test-db
+    plan: free
+    region: singapore
+    databaseName: qrgenerator
+    user: qrgenerator_app
