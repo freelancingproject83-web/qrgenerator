@@ -7,9 +7,8 @@ services:
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
     dockerCommand: >-
-      sh -c 'export CORS_ORIGINS="$PUBLIC_WEB_ORIGIN,$ADMIN_ORIGIN";
       node apps/api/dist/migrate.js &&
-      exec node apps/api/dist/server.js'
+      exec node apps/api/dist/server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -33,16 +32,8 @@ services:
           type: web
           name: medtrace-test-web
           envVarKey: RENDER_EXTERNAL_URL
-      - key: PUBLIC_WEB_ORIGIN
-        fromService:
-          type: web
-          name: medtrace-test-web
-          envVarKey: RENDER_EXTERNAL_URL
-      - key: ADMIN_ORIGIN
-        fromService:
-          type: web
-          name: medtrace-test-admin
-          envVarKey: RENDER_EXTERNAL_URL
+      - key: CORS_ORIGINS
+        value: https://medtrace-test-web.onrender.com,https://medtrace-test-admin.onrender.com
 
   - type: web
     name: medtrace-test-web
